@@ -1,0 +1,131 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Main CloudFormation stack for Learn-Easy - Orchestrates all resources'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    Description: Environment name
+    AllowedValues:
+      - development
+      - staging
+      - production
+  
+  DBUsername:
+    Type: String
+    Default: postgres
+    Description: Database master username
+    NoEcho: true
+  
+  DBPassword:
+    Type: String
+    NoEcho: true
+    Description: Database master password (min 8 characters)
+    MinLength: 8
+  
+  AdminPassword:
+    Type: String
+    NoEcho: true
+    Description: Admin panel password (min 8 characters)
+    MinLength: 8
+  
+  SessionSecret:
+    Type: String
+    NoEcho: true
+    Description: Session secret (min 32 characters)
+    MinLength: 32
+    Default: ''
+  
+  S3BucketName:
+    Type: String
+    Description: S3 bucket name for uploads (must be globally unique, leave empty for auto-generated)
+    Default: ''
+  
+  ImageURI:
+    Type: String
+    Description: ECR image URI (e.g., 123456789012.dkr.ecr.us-east-1.amazonaws.com/learn-easy:latest)
+  
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID where resources will be created
+  
+  SubnetIds:
+    Type: CommaDelimitedList
+    Description: Comma-separated list of subnet IDs (at least 2 for high availability)
+
+Resources:
+  # Database Stack
+  DatabaseStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: database.yml
+      Parameters:
+        DBInstanceIdentifier: !Sub 'learn-easy-${Environment}'
+        DBName: learn_easy
+        DBUsername: !Ref DBUsername
+        DBPassword: !Ref DBPassword
+        DBInstanceClass: db.t3.micro
+        AllocatedStorage: 20
+        VpcId: !Ref VpcId
+        SubnetIds: !Ref SubnetIds
+
+  # S3 Storage Stack
+  S3Stack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: s3-storage.yml
+      Parameters:
+        BucketName: !If
+          - HasCustomBucketName
+          - !Ref S3BucketName
+          - !Sub 'learn-easy-uploads-${Environment}-${AWS::AccountId}'
+        Environment: !Ref Environment
+
+  # Application Stack
+  AppStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ecs-cluster.yml
+      Parameters:
+        ClusterName: !Sub 'learn-easy-${Environment}'
+        ServiceName: !Sub 'learn-easy-service-${Environment}'
+        ImageURI: !Ref ImageURI
+        DesiredCount: 1
+        Cpu: '512'
+        Memory: '1024'
+        VpcId: !Ref VpcId
+        SubnetIds: !Ref SubnetIds
+        DatabaseURL: !GetAtt DatabaseStack.Outputs.DatabaseURL
+        AdminPassword: !Ref AdminPassword
+        SessionSecret: !If
+          - HasSessionSecret
+          - !Ref SessionSecret
+          - !Sub '${AWS::StackName}-${AWS::Region}-${AWS::AccountId}'
+        S3BucketName: !GetAtt S3Stack.Outputs.BucketName
+        AppRoleArn: !GetAtt S3Stack.Outputs.AppRoleArn
+      DependsOn:
+        - DatabaseStack
+        - S3Stack
+
+Conditions:
+  HasCustomBucketName: !Not [!Equals [!Ref S3BucketName, '']]
+  HasSessionSecret: !Not [!Equals [!Ref SessionSecret, '']]
+
+Outputs:
+  ApplicationURL:
+    Description: Application URL
+    Value: !GetAtt AppStack.Outputs.LoadBalancerURL
+    Export:
+      Name: !Sub '${AWS::StackName}-ApplicationURL'
+  
+  DatabaseEndpoint:
+    Description: Database endpoint
+    Value: !GetAtt DatabaseStack.Outputs.DBEndpoint
+    Export:
+      Name: !Sub '${AWS::StackName}-DatabaseEndpoint'
+  
+  S3BucketName:
+    Description: S3 bucket name for uploads
+    Value: !GetAtt S3Stack.Outputs.BucketName
+    Export:
+      Name: !Sub '${AWS::StackName}-S3BucketName'

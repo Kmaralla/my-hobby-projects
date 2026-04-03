@@ -1,0 +1,135 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'RDS PostgreSQL Database for Learn-Easy'
+
+Parameters:
+  DBInstanceIdentifier:
+    Type: String
+    Default: learn-easy-db
+    Description: Database instance identifier
+  
+  DBName:
+    Type: String
+    Default: learn_easy
+    Description: Name of the database
+  
+  DBUsername:
+    Type: String
+    Default: postgres
+    Description: Master username for the database
+    NoEcho: true
+  
+  DBPassword:
+    Type: String
+    NoEcho: true
+    Description: Master password for the database
+    MinLength: 8
+  
+  DBInstanceClass:
+    Type: String
+    Default: db.t3.micro
+    Description: Database instance class
+    AllowedValues:
+      - db.t3.micro
+      - db.t3.small
+      - db.t3.medium
+      - db.t4g.micro
+      - db.t4g.small
+  
+  AllocatedStorage:
+    Type: Number
+    Default: 20
+    Description: Allocated storage in GB
+    MinValue: 20
+    MaxValue: 1000
+  
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID where the database will be created
+  
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: List of subnet IDs for the database (at least 2 for multi-AZ)
+
+Resources:
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName: learn-easy-db-subnet-group
+      DBSubnetGroupDescription: Subnet group for Learn-Easy database
+      SubnetIds: !Ref SubnetIds
+      Tags:
+        - Key: Name
+          Value: Learn-Easy-DB-SubnetGroup
+
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: learn-easy-db-sg
+      GroupDescription: Security group for Learn-Easy database
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 10.0.0.0/16
+          Description: Allow PostgreSQL access from VPC (update with app security group after app stack creation)
+      Tags:
+        - Key: Name
+          Value: Learn-Easy-DB-SecurityGroup
+
+  DBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Ref DBInstanceIdentifier
+      DBName: !Ref DBName
+      Engine: postgres
+      EngineVersion: '15.4'
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: !Ref AllocatedStorage
+      StorageType: gp3
+      StorageEncrypted: true
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroup
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      BackupRetentionPeriod: 7
+      MultiAZ: false
+      PubliclyAccessible: false
+      DeletionProtection: false
+      Tags:
+        - Key: Name
+          Value: Learn-Easy-Database
+        - Key: Environment
+          Value: Production
+
+Outputs:
+  DBEndpoint:
+    Description: RDS instance endpoint
+    Value: !GetAtt DBInstance.Endpoint.Address
+    Export:
+      Name: !Sub '${AWS::StackName}-DBEndpoint'
+  
+  DBPort:
+    Description: RDS instance port
+    Value: !GetAtt DBInstance.Endpoint.Port
+    Export:
+      Name: !Sub '${AWS::StackName}-DBPort'
+  
+  DatabaseURL:
+    Description: Database connection URL
+    Value: !Sub 
+      - 'postgresql://${Username}:${Password}@${Endpoint}:${Port}/${DBName}'
+      - Username: !Ref DBUsername
+        Password: !Ref DBPassword
+        Endpoint: !GetAtt DBInstance.Endpoint.Address
+        Port: !GetAtt DBInstance.Endpoint.Port
+        DBName: !Ref DBName
+    Export:
+      Name: !Sub '${AWS::StackName}-DatabaseURL'
+  
+  DBSecurityGroupId:
+    Description: Security group ID for the database
+    Value: !Ref DBSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-DBSecurityGroupId'

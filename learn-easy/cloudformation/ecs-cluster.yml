@@ -1,0 +1,300 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'ECS Cluster and Service for Learn-Easy Application'
+
+Parameters:
+  ClusterName:
+    Type: String
+    Default: learn-easy-cluster
+    Description: Name of the ECS cluster
+  
+  ServiceName:
+    Type: String
+    Default: learn-easy-service
+    Description: Name of the ECS service
+  
+  ImageURI:
+    Type: String
+    Description: ECR image URI for the application
+  
+  DesiredCount:
+    Type: Number
+    Default: 1
+    Description: Desired number of tasks
+    MinValue: 1
+    MaxValue: 10
+  
+  Cpu:
+    Type: String
+    Default: '512'
+    Description: CPU units for the task (1024 = 1 vCPU)
+    AllowedValues:
+      - '256'
+      - '512'
+      - '1024'
+      - '2048'
+  
+  Memory:
+    Type: String
+    Default: '1024'
+    Description: Memory for the task in MB
+    AllowedValues:
+      - '512'
+      - '1024'
+      - '2048'
+      - '4096'
+  
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID
+  
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: List of subnet IDs (at least 2)
+  
+  DatabaseURL:
+    Type: String
+    Description: Database connection URL
+    NoEcho: true
+  
+  AdminPassword:
+    Type: String
+    Description: Admin password
+    NoEcho: true
+    MinLength: 8
+  
+  SessionSecret:
+    Type: String
+    Description: Session secret
+    NoEcho: true
+    MinLength: 32
+  
+  S3BucketName:
+    Type: String
+    Description: S3 bucket name for uploads
+    Default: ''
+  
+  AppRoleArn:
+    Type: String
+    Description: IAM role ARN for the application
+    Default: ''
+
+Resources:
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref ClusterName
+      CapacityProviders:
+        - FARGATE
+        - FARGATE_SPOT
+      DefaultCapacityProviderStrategy:
+        - CapacityProvider: FARGATE
+          Weight: 1
+      Tags:
+        - Key: Name
+          Value: Learn-Easy-Cluster
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${ClusterName}'
+      RetentionInDays: 7
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: learn-easy-task
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: !Ref Cpu
+      Memory: !Ref Memory
+      ExecutionRoleArn: !Ref ExecutionRole
+      TaskRoleArn: !If
+        - HasAppRole
+        - !Ref AppRoleArn
+        - !Ref TaskRole
+      ContainerDefinitions:
+        - Name: learn-easy-app
+          Image: !Ref ImageURI
+          Essential: true
+          PortMappings:
+            - ContainerPort: 5000
+              Protocol: tcp
+          Environment:
+            - Name: NODE_ENV
+              Value: production
+            - Name: PORT
+              Value: '5000'
+            - Name: DATABASE_URL
+              Value: !Ref DatabaseURL
+            - Name: ADMIN_PASSWORD
+              Value: !Ref AdminPassword
+            - Name: SESSION_SECRET
+              Value: !Ref SessionSecret
+            - Name: STORAGE_TYPE
+              Value: !If
+                - HasS3Bucket
+                - 's3'
+                - 'local'
+            - Name: AWS_S3_BUCKET
+              Value: !If
+                - HasS3Bucket
+                - !Ref S3BucketName
+                - !Ref AWS::NoValue
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - 'wget --quiet --tries=1 --spider http://localhost:5000/api/health || exit 1'
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 60
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ClusterName}-execution-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Condition: NoAppRole
+    Properties:
+      RoleName: !Sub '${ClusterName}-task-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: learn-easy-app-sg
+      GroupDescription: Security group for Learn-Easy application
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+          CidrIp: 0.0.0.0/0
+          Description: Allow HTTP access
+      Tags:
+        - Key: Name
+          Value: Learn-Easy-App-SecurityGroup
+
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Ref ServiceName
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: !Ref DesiredCount
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets: !Ref SubnetIds
+          SecurityGroups:
+            - !Ref SecurityGroup
+      HealthCheckGracePeriodSeconds: 60
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: learn-easy-alb
+      Type: application
+      Scheme: internet-facing
+      Subnets: !Ref SubnetIds
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Tags:
+        - Key: Name
+          Value: Learn-Easy-ALB
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: learn-easy-alb-sg
+      GroupDescription: Security group for ALB
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Allow HTTP access
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: Allow HTTPS access
+      Tags:
+        - Key: Name
+          Value: Learn-Easy-ALB-SG
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: learn-easy-targets
+      Port: 5000
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      TargetType: ip
+      HealthCheckPath: /api/health
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+Conditions:
+  HasS3Bucket: !Not [!Equals [!Ref S3BucketName, '']]
+  HasAppRole: !Not [!Equals [!Ref AppRoleArn, '']]
+  NoAppRole: !Equals [!Ref AppRoleArn, '']
+
+Outputs:
+  ClusterName:
+    Description: ECS cluster name
+    Value: !Ref Cluster
+  
+  ServiceName:
+    Description: ECS service name
+    Value: !Ref Service
+  
+  LoadBalancerDNS:
+    Description: Load balancer DNS name
+    Value: !GetAtt LoadBalancer.DNSName
+    Export:
+      Name: !Sub '${AWS::StackName}-LoadBalancerDNS'
+  
+  LoadBalancerURL:
+    Description: Application URL
+    Value: !Sub 'http://${LoadBalancer.DNSName}'
+    Export:
+      Name: !Sub '${AWS::StackName}-LoadBalancerURL'

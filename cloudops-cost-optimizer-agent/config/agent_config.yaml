@@ -1,0 +1,45 @@
+# CloudOps Cost Optimizer Agent Configuration
+# 
+# This configuration file controls how the agent monitors and optimizes your AWS resources.
+# Modify these settings based on your organization's needs and risk tolerance.
+
+aws:
+  region: us-east-1  # Primary AWS region to monitor
+  profile: default   # AWS profile to use, or leave blank for default credentials
+  # Alternative: set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in environment
+
+monitoring:
+  check_frequency_hours: 24  # How often to run checks in continuous mode
+  cost_threshold_usd: 1000.0  # Alert if monthly costs exceed this amount
+  utilization_threshold_percent: 20.0  # Flag resources with utilization below this
+
+optimization:
+  enabled: true
+  auto_execute: false  # WARNING: Set to true only if you trust the agent to make changes
+  actions:
+    - stop_idle_instances    # Stop instances with low CPU utilization
+    - resize_underutilized   # Recommend smaller instance types
+    - delete_unused_volumes  # Remove unattached EBS volumes
+    - cleanup_old_snapshots  # Clean up old EBS snapshots (future feature)
+  
+notifications:
+  enabled: true
+  channels:
+    - email
+    - slack
+  email:
+    recipients:
+      - admin@example.com      # Replace with your email
+      - devops@example.com     # Add your team's email
+    smtp_server: smtp.gmail.com
+    smtp_port: 587
+    sender: cloudops-agent@example.com  # Replace with your sender email
+  slack:
+    webhook_url: https://hooks.slack.com/services/YOUR/WEBHOOK/URL  # Replace with your webhook
+    channel: "#cloudops-alerts"  # Replace with your channel
+
+logging:
+  level: INFO  # DEBUG, INFO, WARNING, ERROR
+  log_file: logs/agent.log
+  console_output: true
+
