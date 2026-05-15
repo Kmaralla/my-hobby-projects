@@ -10,6 +10,73 @@ import ProjectConnector from "./components/ProjectConnector";
 const STORAGE_KEY = "agentstack_project_source";
 const PINS_KEY = "agentstack_pins";
 
+const STARTER_PROMPTS: Record<Mode, { project: string[]; generic: string[] }> = {
+  founder: {
+    project: [
+      "Should we ship this or cut scope? Give me a GO/NO-GO with the 3 questions I must answer first.",
+      "What's the MVP — what can we cut without losing the core value?",
+      "What are the top 3 bets this product is making, and which ones are unvalidated?",
+    ],
+    generic: [
+      "We're building an AI-powered code review tool. Is this a real business or a feature?",
+      "I have 3 features ready to ship. Help me prioritize: user invites, analytics dashboard, API access.",
+      "What's the difference between a product that gets traction and one that doesn't at this stage?",
+    ],
+  },
+  product: {
+    project: [
+      "Turn this project into a short PRD: primary user, core workflow, P0 requirements, and acceptance criteria.",
+      "What should the next product release include, defer, and explicitly cut?",
+      "Where will users get confused in this product flow, and how should we fix it?",
+    ],
+    generic: [
+      "Help me define the PRD for an AI code review assistant: user, job-to-be-done, P0 requirements, and success metric.",
+      "I have 5 feature ideas. Help me prioritize them into P0/P1/P2/Cut with rationale.",
+      "Write user stories and acceptance criteria for connecting a GitHub repo and getting a product review.",
+    ],
+  },
+  dev: {
+    project: [
+      "Review this codebase for security issues — flag anything critical before we ship.",
+      "What's the biggest architectural debt here and what's the fix?",
+      "What would a staff engineer change first in this code?",
+    ],
+    generic: [
+      "Here's my auth implementation — find the security holes: [paste code]",
+      "I'm choosing between a monolith and microservices for a 3-person team. What's the right call?",
+      "Review this API design and tell me what breaks at scale or under load.",
+    ],
+  },
+  "qa-eng": {
+    project: [
+      "Give me a test plan for the most critical user flow in this project.",
+      "What are the top 3 bugs most likely hiding in this codebase right now?",
+      "What regression risk does this project have and what should I re-test before every release?",
+    ],
+    generic: [
+      "Write a test plan for a payment checkout flow — happy path + edge cases that actually break things.",
+      "I'm testing a file upload feature. What edge cases will find real bugs?",
+      "What's a realistic QA checklist before shipping a new user-facing API?",
+    ],
+  },
+  sales: {
+    project: [
+      "Write a 60-second cold call pitch for this product targeting a VP of Engineering.",
+      "What are the 3 hardest objections a prospect will raise and how do I counter them?",
+      "How should I position this against competitors? Where do we win, where do we lose?",
+    ],
+    generic: [
+      "I'm selling a developer tool at $500/mo per team. What's the right sales motion and who's the buyer?",
+      "Help me write a value prop for an AI code reviewer targeting CTOs at Series B startups.",
+      "What's the difference between a feature that sells itself and one that needs a sales team?",
+    ],
+  },
+};
+
+function getStarterPrompts(mode: Mode, hasProject: boolean): string[] {
+  return hasProject ? STARTER_PROMPTS[mode].project : STARTER_PROMPTS[mode].generic;
+}
+
 // Auto-briefing messages (mirrors lib/prompts.ts BRIEFING_PROMPTS — client-safe copy)
 const BRIEFING_PROMPTS: Record<Mode, string> = {
   founder: "You just loaded my project. Give me a founder brief: the company-level bet, why it might matter now, and the 2 biggest focus or market risks.",
@@ -418,6 +485,13 @@ export default function Home() {
                 isStreaming={streaming && i === messages.length - 1 && msg.role === "assistant"}
               />
             ))}
+            {!streaming && (
+              <PromptSuggestions
+                mode={activeMode}
+                hasProject={!!projectContext}
+                onSend={send}
+              />
+            )}
             <div ref={bottomRef} />
           </div>
         )}
@@ -582,64 +656,6 @@ function EmptyState({ mode, hasProject, projectName, onConnect, onSend }: {
   onConnect: () => void;
   onSend: (text: string) => void;
 }) {
-  const starters: Record<Mode, string[]> = {
-    founder: hasProject
-      ? [
-          "Should we ship this or cut scope? Give me a GO/NO-GO with the 3 questions I must answer first.",
-          "What's the MVP — what can we cut without losing the core value?",
-          "What are the top 3 bets this product is making, and which ones are unvalidated?",
-        ]
-      : [
-          "We're building an AI-powered code review tool. Is this a real business or a feature?",
-          "I have 3 features ready to ship. Help me prioritize: user invites, analytics dashboard, API access.",
-          "What's the difference between a product that gets traction and one that doesn't at this stage?",
-        ],
-    product: hasProject
-      ? [
-          "Turn this project into a short PRD: primary user, core workflow, P0 requirements, and acceptance criteria.",
-          "What should the next product release include, defer, and explicitly cut?",
-          "Where will users get confused in this product flow, and how should we fix it?",
-        ]
-      : [
-          "Help me define the PRD for an AI code review assistant: user, job-to-be-done, P0 requirements, and success metric.",
-          "I have 5 feature ideas. Help me prioritize them into P0/P1/P2/Cut with rationale.",
-          "Write user stories and acceptance criteria for connecting a GitHub repo and getting a product review.",
-        ],
-    dev: hasProject
-      ? [
-          "Review this codebase for security issues — flag anything critical before we ship.",
-          "What's the biggest architectural debt here and what's the fix?",
-          "What would a staff engineer change first in this code?",
-        ]
-      : [
-          "Here's my auth implementation — find the security holes: [paste code]",
-          "I'm choosing between a monolith and microservices for a 3-person team. What's the right call?",
-          "Review this API design and tell me what breaks at scale or under load.",
-        ],
-    "qa-eng": hasProject
-      ? [
-          "Give me a test plan for the most critical user flow in this project.",
-          "What are the top 3 bugs most likely hiding in this codebase right now?",
-          "What regression risk does this project have and what should I re-test before every release?",
-        ]
-      : [
-          "Write a test plan for a payment checkout flow — happy path + edge cases that actually break things.",
-          "I'm testing a file upload feature. What edge cases will find real bugs?",
-          "What's a realistic QA checklist before shipping a new user-facing API?",
-        ],
-    sales: hasProject
-      ? [
-          "Write a 60-second cold call pitch for this product targeting a VP of Engineering.",
-          "What are the 3 hardest objections a prospect will raise and how do I counter them?",
-          "How should I position this against competitors? Where do we win, where do we lose?",
-        ]
-      : [
-          "I'm selling a developer tool at $500/mo per team. What's the right sales motion and who's the buyer?",
-          "Help me write a value prop for an AI code reviewer targeting CTOs at Series B startups.",
-          "What's the difference between a feature that sells itself and one that needs a sales team?",
-        ],
-  };
-
   return (
     <div className="max-w-3xl mx-auto flex flex-col items-center justify-center min-h-full py-8 text-center">
       <div className="text-4xl mb-3">{mode.icon}</div>
@@ -655,17 +671,27 @@ function EmptyState({ mode, hasProject, projectName, onConnect, onSend }: {
         </button>
       )}
       <p className="text-slate-400 text-sm mb-5 max-w-xs">{mode.description}</p>
-      <div className="flex flex-col gap-1.5 w-full max-w-sm">
-        {starters[mode.id].map((s) => (
-          <button
-            key={s}
-            onClick={() => onSend(s)}
-            className={`text-xs px-3 py-2.5 rounded-lg text-left transition-all hover:shadow-sm active:scale-[0.99] ${mode.bgColor} ${mode.color} border ${mode.borderColor} hover:opacity-90`}
-          >
-            {s}
-          </button>
-        ))}
-      </div>
+      <PromptSuggestions mode={mode} hasProject={hasProject} onSend={onSend} />
+    </div>
+  );
+}
+
+function PromptSuggestions({ mode, hasProject, onSend }: {
+  mode: ModeConfig;
+  hasProject: boolean;
+  onSend: (text: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 w-full max-w-sm mx-auto">
+      {getStarterPrompts(mode.id, hasProject).map((s) => (
+        <button
+          key={s}
+          onClick={() => onSend(s)}
+          className={`text-xs px-3 py-2.5 rounded-lg text-left transition-all hover:shadow-sm active:scale-[0.99] ${mode.bgColor} ${mode.color} border ${mode.borderColor} hover:opacity-90`}
+        >
+          {s}
+        </button>
+      ))}
     </div>
   );
 }
