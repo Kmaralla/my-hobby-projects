@@ -4,6 +4,8 @@ agentstack gives a solo founder five AI specialists looking at the same project 
 
 Connect a GitHub repo or local project, ask a question, and switch roles when you need a different kind of judgment.
 
+![agentstack Product mode screenshot](./public/agentstack-screenshot.png)
+
 ---
 
 ## What It Does
@@ -67,6 +69,8 @@ ANTHROPIC_API_KEY=your_anthropic_api_key_here
 AGENTSTACK_MOCK_CHAT=0
 ```
 
+`AGENTSTACK_MOCK_CHAT=0` means the app uses real Anthropic responses. Set it to `1` only when you want deterministic fake responses for smoke tests or CI without using an API key.
+
 Then start the app:
 
 ```bash
@@ -84,7 +88,7 @@ Do not commit `.env.local`. It is ignored by git. Keep real API keys only in loc
 | Variable | Required | Used by | Description |
 |---|---:|---|---|
 | `ANTHROPIC_API_KEY` | Yes, for real AI responses | Server | API key used by `@anthropic-ai/sdk`. Leave empty only when using mock chat for smoke tests. |
-| `AGENTSTACK_MOCK_CHAT` | No | Server / smoke test | Set to `1` for deterministic mock chat responses. Useful for local smoke tests and CI. Default: `0`. |
+| `AGENTSTACK_MOCK_CHAT` | No | Server / smoke test | `0` uses real Anthropic responses. `1` returns deterministic fake responses for smoke tests and CI. Default: `0`. |
 | `NEXT_PUBLIC_VERCEL_ENV` | No | Client | Automatically set by Vercel. When present, the UI hides local-path loading because deployed apps cannot read your local filesystem. |
 
 No secrets are required in the repository. The committed [.env.example](./.env.example) contains placeholders only.
