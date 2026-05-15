@@ -12,10 +12,11 @@ const PINS_KEY = "agentstack_pins";
 
 // Auto-briefing messages (mirrors lib/prompts.ts BRIEFING_PROMPTS — client-safe copy)
 const BRIEFING_PROMPTS: Record<Mode, string> = {
-  founder: "You just loaded my project. Give me a founder's 30-second take: what's being built, what's the core bet, and 2 things that immediately stand out as opportunities or risks.",
-  dev: "You just loaded my codebase. Give me a staff engineer's quick read: tech stack, architecture pattern, and 2 things that stand out — good decisions or concerns.",
-  "qa-eng": "You just loaded my project. Give me a QA brief: the main testable flows and the 2 highest-risk areas from a quality standpoint.",
-  sales: "You just loaded my product. Give me a sales brief: what it does for the customer in one sentence, who the buyer is, and 2 things that make this easier or harder to sell.",
+  founder: "You just loaded my project. Give me a founder brief: the company-level bet, why it might matter now, and the 2 biggest focus or market risks.",
+  product: "You just loaded my project. Give me a PM brief: primary user, job-to-be-done, core workflow, and 2 product decisions that need clarity.",
+  dev: "You just loaded my codebase. Give me an engineering brief: architecture shape, highest technical risk, and 2 implementation concerns or strengths.",
+  "qa-eng": "You just loaded my project. Give me a QA brief: release-blocking user flow, top likely failure mode, and what must be tested first.",
+  sales: "You just loaded my product. Give me a GTM brief: likely buyer, pain being sold, sales motion, and 2 objections that will come up.",
 };
 
 export default function Home() {
@@ -78,9 +79,12 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Keyboard shortcuts: 1/2/3/4 to switch modes
+  // Keyboard shortcuts: number keys switch modes
   useEffect(() => {
-    const modeKeys: Record<string, Mode> = { "1": "founder", "2": "dev", "3": "qa-eng", "4": "sales" };
+    const modeKeys = MODES.reduce<Record<string, Mode>>((acc, m, i) => {
+      acc[String(i + 1)] = m.id;
+      return acc;
+    }, {});
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -240,8 +244,8 @@ export default function Home() {
     return sendWithContext(textOverride ?? input);
   }
 
-  // Ask all 4 roles in parallel (non-streaming, shows results together)
-  async function askAll4() {
+  // Ask all roles in parallel (non-streaming, shows results together)
+  async function askAllRoles() {
     const text = input.trim();
     if (!text || streaming) return;
     setInput("");
@@ -439,14 +443,14 @@ export default function Home() {
                 el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
               }}
             />
-            {/* Ask all 4 */}
+            {/* Ask all roles */}
             <button
-              onClick={askAll4}
+              onClick={askAllRoles}
               disabled={streaming || !input.trim()}
-              title="Ask all 4 roles simultaneously"
+              title="Ask every role simultaneously"
               className="px-3 py-3 rounded-xl text-xs font-medium border border-slate-200 text-slate-500 hover:border-slate-400 hover:text-slate-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
             >
-              Ask all 4
+              Ask all
             </button>
             {/* Send */}
             <button
@@ -472,7 +476,7 @@ export default function Home() {
             <p className="text-xs text-slate-400">
               <span className={`font-medium ${activeMode.color}`}>{activeMode.icon} {activeMode.label}</span>
               {projectContext && <span className="text-slate-300"> · 📁 {projectContext.projectName}</span>}
-              <span className="text-slate-300"> · Enter↵  · keys 1–4 switch role</span>
+              <span className="text-slate-300"> · Enter↵  · number keys switch role</span>
             </p>
             {/* Deep / Brief toggle */}
             <button
@@ -589,6 +593,17 @@ function EmptyState({ mode, hasProject, projectName, onConnect, onSend }: {
           "We're building an AI-powered code review tool. Is this a real business or a feature?",
           "I have 3 features ready to ship. Help me prioritize: user invites, analytics dashboard, API access.",
           "What's the difference between a product that gets traction and one that doesn't at this stage?",
+        ],
+    product: hasProject
+      ? [
+          "Turn this project into a short PRD: primary user, core workflow, P0 requirements, and acceptance criteria.",
+          "What should the next product release include, defer, and explicitly cut?",
+          "Where will users get confused in this product flow, and how should we fix it?",
+        ]
+      : [
+          "Help me define the PRD for an AI code review assistant: user, job-to-be-done, P0 requirements, and success metric.",
+          "I have 5 feature ideas. Help me prioritize them into P0/P1/P2/Cut with rationale.",
+          "Write user stories and acceptance criteria for connecting a GitHub repo and getting a product review.",
         ],
     dev: hasProject
       ? [
@@ -727,6 +742,7 @@ function getPlaceholder(mode: Mode, hasProject: boolean): string {
   if (hasProject) {
     const map: Record<Mode, string> = {
       founder: "Ask about strategy, priorities, or risks in this project…",
+      product: "Ask for a PRD, product requirements, priority, or UX risks…",
       dev: "Ask for a code review, architecture critique, or security audit…",
       "qa-eng": "Ask for a test plan, edge cases, or regression analysis…",
       sales: "Ask for positioning, a pitch, or objection handling…",
@@ -735,6 +751,7 @@ function getPlaceholder(mode: Mode, hasProject: boolean): string {
   }
   const map: Record<Mode, string> = {
     founder: "Describe what you're building or ask for a strategic review…",
+    product: "Describe a feature or product to get requirements and a release slice…",
     dev: "Paste code, describe a PR, or ask for an architecture review…",
     "qa-eng": "Describe a feature or flow to get a test plan and edge cases…",
     sales: "Describe a feature or product to get positioning and a pitch…",
@@ -745,6 +762,7 @@ function getPlaceholder(mode: Mode, hasProject: boolean): string {
 function getModeButtonStyle(mode: Mode): string {
   const map: Record<Mode, string> = {
     founder: "bg-violet-600 hover:bg-violet-700",
+    product: "bg-cyan-600 hover:bg-cyan-700",
     dev: "bg-blue-600 hover:bg-blue-700",
     "qa-eng": "bg-emerald-600 hover:bg-emerald-700",
     sales: "bg-orange-500 hover:bg-orange-600",

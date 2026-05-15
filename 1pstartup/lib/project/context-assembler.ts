@@ -4,6 +4,7 @@ import { estimateTokens } from "./token-budget";
 
 const ROLE_LENS_LABEL: Record<Mode, string> = {
   founder: "Founder lens — business context, product direction, roadmap",
+  product: "Product lens — users, requirements, flows, prioritization",
   dev: "Dev lens — source code, architecture, configuration",
   "qa-eng": "QA lens — tests, CI/CD, quality coverage",
   sales: "Sales lens — product docs, README, positioning",
@@ -31,7 +32,7 @@ export function assembleProjectContext(
   const totalTokens = files.reduce((sum, f) => sum + f.tokenEstimate, 0);
   const sourceLabel = source.type === "local"
     ? `Local — ${source.path}`
-    : `GitHub — ${source.owner}/${source.repo} (${source.branch})`;
+    : `GitHub — ${source.owner}/${source.repo}${source.path ? `/${source.path}` : ""} (${source.branch})`;
 
   const header = [
     `## Project: ${projectName}`,

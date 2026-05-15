@@ -22,11 +22,11 @@ export async function POST(req: Request): Promise<Response> {
       projectName = result.projectName;
     } else {
       const result = await loadGitHubProject(
-        source.owner, source.repo, source.branch, mode, source.token
+        source.owner, source.repo, source.branch, mode, source.token, source.path
       );
       files = result.files;
       directoryTree = result.directoryTree;
-      projectName = source.repo;
+      projectName = source.path ? `${source.repo}/${source.path}` : source.repo;
       // Update branch with resolved value
       source.branch = result.resolvedBranch;
     }

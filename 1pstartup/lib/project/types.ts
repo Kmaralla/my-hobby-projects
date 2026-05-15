@@ -12,6 +12,7 @@ export interface GitHubProjectSource {
   owner: string;
   repo: string;
   branch: string;
+  path?: string;
   token?: string;
 }
 

@@ -1,104 +1,204 @@
 # agentstack
 
-When you're a one-person startup, you wear four hats — founder, engineer, QA, and sales. The problem is switching between them takes mental energy you don't have.
+agentstack gives a solo founder five AI specialists looking at the same project from different seats at the table: Founder, Product, Dev, QA Eng, and Sales.
 
-agentstack gives you four AI specialists, all reading the same codebase, each thinking from a different seat at the table.
-
-**[Live demo →](https://agentstack-3j0pcr119-fin-cast-ai.vercel.app)**
+Connect a GitHub repo or local project, ask a question, and switch roles when you need a different kind of judgment.
 
 ---
 
-## What it actually does
+## What It Does
 
-Connect a GitHub repo. Then ask anything:
+Connect a project, then ask questions like:
 
-**As Founder** — *"Should we build this or cut scope?"*
-> **GO.** This solves a real pain for engineering leads at Series A-B companies. Cut the analytics dashboard from v1 — it's scope creep. Ship the core workflow first and see if anyone asks for reporting.
+**Founder** — "Is this worth building now?"
+> Company-level bet, market risk, focus trade-offs, validation, and GO / NO-GO / PIVOT calls.
 
-**As Dev** — *"What should I fix before we ship?"*
-> **SHIP WITH FIXES.** Critical: `auth/session.ts:47` — JWT secret falls back to a hardcoded string if the env var is missing. That's a production security hole. Everything else is minor.
+**Product** — "What should the next release include?"
+> User job, PRD-style requirements, P0/P1/P2 scope, UX risks, success metrics, and handoff notes.
 
-**As QA Eng** — *"What's most likely to break?"*
-> **RELEASE WITH CAVEATS.** File upload silently fails above 10MB with no user feedback. Concurrent form submissions create duplicate records. Both are reproducible, both need fixing before paying users hit them.
+**Dev** — "What should I fix before merge?"
+> Correctness, security, reliability, architecture, maintainability, and engineering verification.
 
-**As Sales** — *"How do I pitch this?"*
-> **NEEDS POSITIONING WORK.** You're selling to the wrong person. The VP Eng doesn't feel this pain — the staff engineer does. Lead with "eliminates the manual review step your team hates", not "AI-powered code quality."
+**QA Eng** — "What is most likely to break?"
+> Release-blocking flows, failure modes, regression risk, test strategy, and release gates.
+
+**Sales** — "How do I sell this?"
+> Buyer pain, value prop, sales motion, objections, proof needed, and pitch language.
 
 ---
 
-## Why not just use Claude?
+## Why Not Just Use Claude?
 
-Claude gives you great general answers. agentstack gives you role-specific verdicts on your actual code.
+Claude gives strong general answers. agentstack gives role-specific verdicts grounded in your actual project files.
 
 | | Claude / ChatGPT | agentstack |
 |---|---|---|
-| Knows your codebase | No — you paste snippets | Yes — reads your repo |
-| Role-aware | Generic assistant | Founder / Dev / QA / Sales |
-| Output format | Essays | GO/NO-GO, SHIP/NEEDS REWORK |
-| Cross-role | No | All four roles, same project |
-| Decision history | No | Pinned decision log |
+| Knows your codebase | Only what you paste | Loads relevant repo files |
+| Role-aware | Generic assistant | Founder / Product / Dev / QA / Sales |
+| Output style | Broad essays | Role-specific verdicts and next steps |
+| Cross-role review | Manual | Ask every role at once |
+| Decision history | Manual notes | Pinned decision log |
 
 ---
 
-## Setup
+## Requirements
 
-**Deploy your own** (5 minutes):
+- Node.js 20 or newer
+- npm
+- An Anthropic API key for real chat responses
 
-1. Fork this repo
-2. Import into [Vercel](https://vercel.com/new)
-3. Add `ANTHROPIC_API_KEY` to your environment variables
-4. Deploy
+Get an Anthropic API key from [console.anthropic.com](https://console.anthropic.com/settings/keys).
 
-**Run locally:**
+---
+
+## Local Setup
 
 ```bash
-git clone https://github.com/Kmaralla/agentstack-ui
-cd agentstack-ui
+git clone https://github.com/Kmaralla/my-hobby-projects.git
+cd my-hobby-projects/1pstartup
 npm install
-cp .env.example .env.local   # add your ANTHROPIC_API_KEY
+cp .env.example .env.local
+```
+
+Edit `.env.local`:
+
+```bash
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+AGENTSTACK_MOCK_CHAT=0
+```
+
+Then start the app:
+
+```bash
 npm run dev
 ```
 
-Get an API key at [console.anthropic.com](https://console.anthropic.com/settings/keys).
+Open [http://localhost:3000](http://localhost:3000).
+
+Do not commit `.env.local`. It is ignored by git. Keep real API keys only in local environment files or your deployment provider's secret manager.
 
 ---
 
-## How the project context works
+## Environment Variables
 
-When you connect a repo, each role loads the files most relevant to its job — not everything, just what it needs to think clearly:
+| Variable | Required | Used by | Description |
+|---|---:|---|---|
+| `ANTHROPIC_API_KEY` | Yes, for real AI responses | Server | API key used by `@anthropic-ai/sdk`. Leave empty only when using mock chat for smoke tests. |
+| `AGENTSTACK_MOCK_CHAT` | No | Server / smoke test | Set to `1` for deterministic mock chat responses. Useful for local smoke tests and CI. Default: `0`. |
+| `NEXT_PUBLIC_VERCEL_ENV` | No | Client | Automatically set by Vercel. When present, the UI hides local-path loading because deployed apps cannot read your local filesystem. |
 
-- **Founder** — README, docs, changelogs. Business context first.
-- **Dev** — Source files, config, architecture docs. Code first.
-- **QA Eng** — Test files, CI config, then source. Coverage first.
-- **Sales** — README, docs, marketing copy. Customer context first.
-
-The project stays connected as you switch roles. Switch from Founder to Dev — it re-reads the codebase through a different lens without you doing anything.
+No secrets are required in the repository. The committed [.env.example](./.env.example) contains placeholders only.
 
 ---
 
-## Features
+## Connecting Projects
 
-**Fast vs Deep** — Default is `claude-sonnet-4-6` (fast, concise). Toggle Deep mode for `claude-opus-4-6` with extended thinking when you need a genuine deep analysis, not just a quick take.
+### Public GitHub Repos
 
-**Ask all 4** — Runs your question across every role simultaneously. Good when a decision spans product, engineering, quality, and go-to-market at once.
+Paste a repo URL:
 
-**Auto-brief** — Connect a project and each role immediately tells you what it notices, without you having to ask.
+```text
+https://github.com/owner/repo
+```
 
-**Decision log** — Pin any response with one click. Saved across sessions. Your record of what you decided and why.
+You can also load a specific folder:
 
-**Keyboard shortcuts** — Press `1` `2` `3` `4` to switch roles without touching the mouse.
+```text
+https://github.com/owner/repo/tree/main/path/to/folder
+```
+
+agentstack resolves the branch and folder, loads only relevant files for the selected role, and keeps that project connected as you switch roles.
+
+### Private GitHub Repos
+
+For private repos, paste a GitHub token in the UI when connecting the project.
+
+Use the least privilege token that can read the target repo. The token is sent to your own server route to call GitHub and is not stored in localStorage by the app.
+
+### Local Projects
+
+When running locally, you can load an absolute path:
+
+```text
+/Users/you/projects/my-app
+```
+
+Local project loading is disabled in deployed Vercel environments.
+
+---
+
+## Scripts
+
+```bash
+npm run dev      # start local development server
+npm run build    # production build and TypeScript check
+npm run start    # start the production build
+npm run smoke    # local smoke test for project loading + streaming chat
+```
+
+The smoke test starts the app on a temporary local port, loads:
+
+```text
+https://github.com/Kmaralla/my-hobby-projects/tree/main/1pstartup
+```
+
+Then it calls the streaming chat endpoint with `AGENTSTACK_MOCK_CHAT=1`, so it does not require a real Anthropic API call.
+
+To smoke-test another public repo or folder:
+
+```bash
+SMOKE_REPO_URL=https://github.com/owner/repo/tree/main/path npm run smoke
+```
+
+---
+
+## Deploying To Vercel
+
+1. Fork or import the repo into Vercel.
+2. Set `ANTHROPIC_API_KEY` in Vercel Project Settings → Environment Variables.
+3. Deploy.
+
+Optional:
+
+- Leave `AGENTSTACK_MOCK_CHAT` unset or set to `0` for production.
+- Set it to `1` only for preview environments where you want deterministic mock responses.
+
+---
+
+## How Project Context Works
+
+Each role loads a different slice of the project:
+
+- **Founder**: README, docs, roadmap, product context, and high-level source signals.
+- **Product**: docs, PRDs, roadmap, UI surfaces, user flows, and product-facing source.
+- **Dev**: source files, config, architecture docs, server/API code, and workflows.
+- **QA Eng**: tests, CI config, source files, and flows that need release confidence.
+- **Sales**: README, docs, changelog, marketing copy, and product feature surfaces.
+
+The app estimates token budget per role and selects the most relevant files before sending context to the model.
 
 ---
 
 ## Stack
 
-- Next.js 16 (App Router, Turbopack)
-- Anthropic API — `claude-sonnet-4-6` / `claude-opus-4-6`
+- Next.js 16 App Router
+- React 19
 - Tailwind CSS v4
-- Deployed on Vercel
+- Anthropic SDK
+- GitHub API for remote project loading
 
 ---
 
-## The idea
+## Open Source Safety Notes
 
-Inspired by Garry Tan's [gstack](https://github.com/garrytan/gstack) — the principle that every decision in a startup needs stress-testing from multiple angles before you commit to it. This is that, connected to your actual project and tuned for the four roles a solo founder plays every day.
+- Never commit `.env.local`, real API keys, or GitHub tokens.
+- Keep `.env.example` as placeholders only.
+- Use deployment environment variables for production secrets.
+- Prefer short-lived or least-privilege GitHub tokens for private repo testing.
+- Review logs before deploying changes that handle secrets or repo contents.
+
+---
+
+## Inspiration
+
+Inspired by Garry Tan's [gstack](https://github.com/garrytan/gstack): every startup decision benefits from stress-testing across different functional lenses before you commit.

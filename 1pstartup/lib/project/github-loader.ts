@@ -26,6 +26,10 @@ export function parseGitHubInput(input: string): { owner: string; repo: string }
   return { owner: parts[0], repo: parts[1] };
 }
 
+function normalizeRepoPath(repoPath?: string): string {
+  return (repoPath ?? "").replace(/^\/+|\/+$/g, "");
+}
+
 async function getDefaultBranch(owner: string, repo: string, token?: string): Promise<string> {
   const res = await fetch(`${GITHUB_API}/repos/${owner}/${repo}`, {
     headers: makeHeaders(token),
@@ -134,16 +138,28 @@ export async function loadGitHubProject(
   repo: string,
   branch: string,
   mode: Mode,
-  token?: string
+  token?: string,
+  repoPath?: string
 ): Promise<{ files: ProjectFile[]; directoryTree: string; resolvedBranch: string }> {
   const manifest = ROLE_FILE_MANIFESTS[mode];
   const tokenBudget = ROLE_TOKEN_BUDGETS[mode];
+  const rootPath = normalizeRepoPath(repoPath);
 
   // Resolve branch if empty
   const resolvedBranch = branch || await getDefaultBranch(owner, repo, token);
 
   // Get full file tree
-  const tree = await getRepoTree(owner, repo, resolvedBranch, token);
+  const fullTree = await getRepoTree(owner, repo, resolvedBranch, token);
+  const tree = rootPath
+    ? fullTree
+        .filter((e) => e.path === rootPath || e.path.startsWith(`${rootPath}/`))
+        .map((e) => ({ ...e, path: e.path.slice(rootPath.length).replace(/^\//, "") }))
+        .filter((e) => e.path.length > 0)
+    : fullTree;
+
+  if (rootPath && tree.length === 0) {
+    throw new Error(`Path "${rootPath}" was not found in ${owner}/${repo} on branch "${resolvedBranch}".`);
+  }
 
   // Build a simple directory tree (top 2 levels)
   const dirs = new Set<string>();
@@ -151,7 +167,8 @@ export async function loadGitHubProject(
     const parts = e.path.split("/");
     if (parts.length > 1) dirs.add(parts[0]);
   });
-  const directoryTree = `${repo}/\n${[...dirs].slice(0, 30).map((d) => `├── ${d}/`).join("\n")}\n${tree.filter((e) => !e.path.includes("/")).slice(0, 20).map((e) => `├── ${e.path}`).join("\n")}`;
+  const rootLabel = rootPath ? `${repo}/${rootPath}` : repo;
+  const directoryTree = `${rootLabel}/\n${[...dirs].slice(0, 30).map((d) => `├── ${d}/`).join("\n")}\n${tree.filter((e) => !e.path.includes("/")).slice(0, 20).map((e) => `├── ${e.path}`).join("\n")}`;
 
   // Score and filter files
   const scored: Array<{ path: string; priority: number; size: number }> = [];
@@ -178,7 +195,8 @@ export async function loadGitHubProject(
 
   // Fetch contents in batches
   const fetchTasks = toFetch.map((f) => async () => {
-    const content = await fetchFileContent(owner, repo, f.path, resolvedBranch, token);
+    const fetchPath = rootPath ? `${rootPath}/${f.path}` : f.path;
+    const content = await fetchFileContent(owner, repo, fetchPath, resolvedBranch, token);
     return { path: f.path, content, priority: f.priority };
   });
 

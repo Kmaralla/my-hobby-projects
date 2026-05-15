@@ -13,6 +13,27 @@ interface Props {
 
 const IS_DEPLOYED = process.env.NEXT_PUBLIC_VERCEL_ENV !== undefined;
 
+function parseGitHubUrl(input: string): { owner: string; repo: string; branch: string; path?: string } | null {
+  const cleaned = input.trim()
+    .replace(/^https?:\/\/github\.com\//, "")
+    .replace(/^github\.com\//, "")
+    .replace(/\.git$/, "");
+  const parts = cleaned.split("/").filter(Boolean);
+  if (parts.length < 2) return null;
+
+  const [owner, repo, view, branch, ...pathParts] = parts;
+  if ((view === "tree" || view === "blob") && branch) {
+    return {
+      owner,
+      repo,
+      branch,
+      path: pathParts.length > 0 ? pathParts.join("/") : undefined,
+    };
+  }
+
+  return { owner, repo, branch: "" };
+}
+
 export default function ProjectConnector({ mode, onLoad, loading, error }: Props) {
   const [sourceType, setSourceType] = useState<"local" | "github">("github");
   const [localPath, setLocalPath] = useState("");
@@ -26,17 +47,14 @@ export default function ProjectConnector({ mode, onLoad, loading, error }: Props
       onLoad({ type: "local", path: localPath.trim() });
     } else {
       if (!githubUrl.trim()) return;
-      const cleaned = githubUrl.trim()
-        .replace(/^https?:\/\/github\.com\//, "")
-        .replace(/^github\.com\//, "")
-        .replace(/\.git$/, "");
-      const parts = cleaned.split("/").filter(Boolean);
-      if (parts.length < 2) return;
+      const parsed = parseGitHubUrl(githubUrl);
+      if (!parsed) return;
       onLoad({
         type: "github",
-        owner: parts[0],
-        repo: parts[1],
-        branch: parts[2] || "",
+        owner: parsed.owner,
+        repo: parsed.repo,
+        branch: parsed.branch,
+        path: parsed.path,
         token: githubToken.trim() || undefined,
       });
     }

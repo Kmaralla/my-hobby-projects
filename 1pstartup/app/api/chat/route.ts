@@ -7,6 +7,31 @@ export const runtime = "nodejs";
 
 const client = new Anthropic();
 
+function mockText(mode: Mode, projectContext?: string): string {
+  const projectLabel = projectContext ? "with project context" : "without project context";
+  return `**MOCK ${mode.toUpperCase()} RESPONSE** — smoke test passed ${projectLabel}.`;
+}
+
+function streamText(text: string): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text })}\n\n`));
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
+
 export async function POST(req: Request) {
   const {
     mode,
@@ -25,6 +50,11 @@ export async function POST(req: Request) {
   };
 
   console.log(`[chat] mode=${mode} deep=${deep} stream=${wantStream} msgs=${messages.length} hasProject=${!!projectContext}`);
+
+  if (process.env.AGENTSTACK_MOCK_CHAT === "1") {
+    const text = mockText(mode, projectContext);
+    return wantStream ? streamText(text) : Response.json({ text });
+  }
 
   const systemPrompt = getSystemPrompt(mode, context, projectContext, { brief: !deep });
   const model = deep ? "claude-opus-4-6" : "claude-sonnet-4-6";

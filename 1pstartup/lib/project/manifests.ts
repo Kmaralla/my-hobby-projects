@@ -3,6 +3,7 @@ import type { RoleFileManifest } from "./types";
 
 export const ROLE_TOKEN_BUDGETS: Record<Mode, number> = {
   founder: 30000,
+  product: 30000,
   dev:     40000,
   "qa-eng": 30000,
   sales:   25000,
@@ -41,6 +42,31 @@ export const ROLE_FILE_MANIFESTS: Record<Mode, RoleFileManifest> = {
     excludePatterns: ["node_modules", ".git", "dist", "build", ".next", "*.lock", "*.log"],
     maxFilesPerPattern: 10,
     perFileTokenLimit: 3000,
+  },
+
+  product: {
+    priorityFiles: [
+      ...BASE_PRIORITY_FILES,
+      "PRD.md", "PRODUCT.md", "PRODUCT_SPEC.md",
+      "ROADMAP.md", "ROADMAP.txt",
+      "docs/product.md", "docs/overview.md", "docs/requirements.md",
+      "docs/user-flows.md", "docs/stories.md",
+      "CHANGELOG.md", "CONTRIBUTING.md",
+      "app/page.tsx", "src/app/page.tsx",     // product surface signal
+    ],
+    patterns: [
+      "docs/**/*.md", "*.md",
+      "app/**/*.tsx", "src/**/*.tsx",
+      "components/**/*.tsx", "src/components/**/*.tsx",
+      ...BASE_SOURCE_PATTERNS,
+    ],
+    excludePatterns: [
+      "node_modules", ".git", "dist", "build", ".next",
+      "*.lock", "*.log", "*.min.js", "*.map", "*.d.ts",
+      "**/*.test.*", "**/*.spec.*", "**/__tests__/**",
+    ],
+    maxFilesPerPattern: 12,
+    perFileTokenLimit: 2500,
   },
 
   dev: {
