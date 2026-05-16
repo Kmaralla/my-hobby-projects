@@ -12,6 +12,8 @@ const SESSION_CONTEXTS_KEY = "1pstartup_project_contexts";
 const PINS_KEY = "1pstartup_pins";
 const CHAT_TIMEOUT_MS = 60_000;
 const AUTO_BRIEF_DELAY_MS = 350;
+const RAPID_SWITCH_WINDOW_MS = 20_000;
+const RAPID_SWITCH_LIMIT = 3;
 
 const STARTER_PROMPTS: Record<Mode, { project: string[]; generic: string[] }> = {
   founder: {
@@ -112,6 +114,25 @@ const BRIEFING_PROMPTS: Record<Mode, string> = {
   sales: "You just loaded my product. Give me a GTM brief: likely buyer, pain being sold, sales motion, and 2 objections that will come up.",
 };
 
+type AskAllResult = {
+  mode: ModeConfig;
+  status: "thinking" | "done" | "error";
+  text: string;
+};
+
+function formatAskAllResults(results: AskAllResult[]): string {
+  return results
+    .map((r) => {
+      const label = r.status === "thinking"
+        ? "_Thinking..._"
+        : r.status === "error"
+          ? `**Error:** ${r.text}`
+          : r.text;
+      return `### ${r.mode.icon} ${r.mode.label}\n${label}`;
+    })
+    .join("\n\n---\n\n");
+}
+
 export default function Home() {
   const [mode, setMode] = useState<Mode>("founder");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -121,6 +142,8 @@ export default function Home() {
   const [streaming, setStreaming] = useState(false);
   const [deep, setDeep] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [autoBriefOnSwitch, setAutoBriefOnSwitch] = useState(true);
+  const [showRapidSwitchWarning, setShowRapidSwitchWarning] = useState(false);
 
   const [projectSource, setProjectSource] = useState<ProjectSource | null>(null);
   const [projectContexts, setProjectContexts] = useState<Partial<Record<Mode, ProjectContext>>>({});
@@ -144,6 +167,7 @@ export default function Home() {
   const manualBriefedModesRef = useRef(new Set<Mode>());
   const justConnectedRef = useRef(false);
   const pendingAutoBriefModeRef = useRef<Mode | null>(null);
+  const switchTimesRef = useRef<number[]>([]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -194,12 +218,13 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-brief only the role that was explicitly loaded.
+  // Auto-brief the current role when enabled and a project context is ready.
   useEffect(() => {
     const ctx = projectContexts[mode];
     if (
       ctx &&
       pendingAutoBriefModeRef.current === mode &&
+      autoBriefOnSwitch &&
       messages.length === 0 &&
       !streaming &&
       !briefedModesRef.current.has(mode)
@@ -218,7 +243,7 @@ export default function Home() {
       return () => window.clearTimeout(timeout);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectContexts, mode, messages.length, streaming]);
+  }, [projectContexts, mode, messages.length, streaming, autoBriefOnSwitch]);
 
   // Auto-brief manual context as users move through roles without a project.
   useEffect(() => {
@@ -306,7 +331,12 @@ export default function Home() {
 
   function switchMode(newMode: Mode) {
     abortStream();
-    pendingAutoBriefModeRef.current = null;
+    const now = Date.now();
+    switchTimesRef.current = [...switchTimesRef.current.filter((t) => now - t < RAPID_SWITCH_WINDOW_MS), now];
+    if (switchTimesRef.current.length >= RAPID_SWITCH_LIMIT) {
+      setShowRapidSwitchWarning(true);
+    }
+    pendingAutoBriefModeRef.current = autoBriefOnSwitch ? newMode : null;
     setMode(newMode);
     setMessages([]);
     if (projectSource && !projectContexts[newMode]) {
@@ -320,6 +350,7 @@ export default function Home() {
     setProjectError(null);
     briefedModesRef.current.clear();
     pendingAutoBriefModeRef.current = null;
+    setShowRapidSwitchWarning(false);
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     try { sessionStorage.removeItem(SESSION_CONTEXTS_KEY); } catch { /* ignore */ }
   }
@@ -327,7 +358,7 @@ export default function Home() {
   async function handleProjectLoad(source: ProjectSource) {
     justConnectedRef.current = true;
     briefedModesRef.current.clear(); // reset so new project gets a fresh brief
-    pendingAutoBriefModeRef.current = mode;
+    pendingAutoBriefModeRef.current = autoBriefOnSwitch ? mode : null;
     const ok = await loadProject(source, mode);
     if (!ok) pendingAutoBriefModeRef.current = null;
     if (ok) setShowModal(false);
@@ -449,39 +480,52 @@ export default function Home() {
     if (!text || streamingRef.current) return;
     setInput("");
     const newMessages: Message[] = [...messages, { role: "user", content: text }];
-    setMessages([...newMessages, { role: "assistant", content: "" }]);
+    const initialResults: AskAllResult[] = MODES.map((m) => ({
+      mode: m,
+      status: "thinking",
+      text: "",
+    }));
+    setMessages([...newMessages, { role: "assistant", content: formatAskAllResults(initialResults) }]);
     streamingRef.current = true;
     setStreaming(true);
 
     try {
-      const results = await Promise.all(
-        MODES.map(async (m) => {
+      const results = [...initialResults];
+      await Promise.all(
+        MODES.map(async (m, index) => {
           const ctx = projectContexts[m.id];
-          const res = await fetch("/api/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              mode: m.id,
-              messages: newMessages,
-              context: manualContextActive ? manualContext.trim() || undefined : undefined,
-              projectContext: ctx?.summary,
-              deep: false,
-              stream: false,
-            }),
-          });
-          const data = await res.json();
-          return { mode: m, text: (data.text || data.error || "No response") as string };
+          try {
+            const res = await fetch("/api/chat", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                mode: m.id,
+                messages: newMessages,
+                context: manualContextActive ? manualContext.trim() || undefined : undefined,
+                projectContext: ctx?.summary,
+                deep: false,
+                stream: false,
+              }),
+            });
+            const data = await res.json();
+            results[index] = {
+              mode: m,
+              status: data.error ? "error" : "done",
+              text: (data.text || data.error || "No response") as string,
+            };
+          } catch (err) {
+            results[index] = {
+              mode: m,
+              status: "error",
+              text: err instanceof Error ? err.message : "Something went wrong",
+            };
+          }
+          setMessages((prev) => [
+            ...prev.slice(0, -1),
+            { role: "assistant", content: formatAskAllResults(results) },
+          ]);
         })
       );
-
-      const combined = results
-        .map((r) => `### ${r.mode.icon} ${r.mode.label}\n${r.text}`)
-        .join("\n\n---\n\n");
-
-      setMessages((prev) => [
-        ...prev.slice(0, -1),
-        { role: "assistant", content: combined },
-      ]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
       setMessages((prev) => [
@@ -594,6 +638,21 @@ export default function Home() {
             <span>✏️</span>
             {manualContextActive && <span>Manual context</span>}
           </button>
+          <button
+            onClick={() => {
+              setAutoBriefOnSwitch((enabled) => !enabled);
+              pendingAutoBriefModeRef.current = null;
+              setShowRapidSwitchWarning(false);
+            }}
+            className={`text-xs px-2.5 py-1 rounded border transition-colors ${
+              autoBriefOnSwitch
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border-slate-200 text-slate-400 hover:text-slate-600"
+            }`}
+            title={autoBriefOnSwitch ? "Auto-brief is on for role switches" : "Auto-brief is off"}
+          >
+            {autoBriefOnSwitch ? "Auto brief on" : "Auto brief off"}
+          </button>
           {messages.length > 0 && (
             <button onClick={() => setMessages([])} className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1 rounded hover:bg-slate-100 transition-colors">
               clear
@@ -604,6 +663,24 @@ export default function Home() {
 
       {/* Chat area */}
       <div className="flex-1 overflow-y-auto px-4 py-4 min-h-0">
+        {showRapidSwitchWarning && autoBriefOnSwitch && (
+          <div className="max-w-3xl mx-auto mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex items-center justify-between gap-3">
+            <span>Auto-brief is generating on role switches. Rapid switching can hit model rate limits.</span>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => {
+                  setAutoBriefOnSwitch(false);
+                  pendingAutoBriefModeRef.current = null;
+                  setShowRapidSwitchWarning(false);
+                }}
+                className="font-medium underline"
+              >
+                Turn off
+              </button>
+              <button onClick={() => setShowRapidSwitchWarning(false)} className="text-amber-600 hover:text-amber-900">✕</button>
+            </div>
+          </div>
+        )}
         {messages.length === 0 ? (
           <EmptyState
             mode={activeMode}
