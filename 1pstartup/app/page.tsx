@@ -586,11 +586,14 @@ export default function Home() {
           )}
           <button
             onClick={() => { setShowModal(true); setModalTab("manual"); }}
-            className={`text-xs px-2 py-1 rounded border transition-colors ${
+            className={`text-xs px-2 py-1 rounded border transition-colors flex items-center gap-1 ${
               manualContextActive ? "border-slate-400 text-slate-700 bg-slate-100" : "border-slate-200 text-slate-400 hover:text-slate-600"
             }`}
             title="Manual context"
-          >✏️</button>
+          >
+            <span>✏️</span>
+            {manualContextActive && <span>Manual context</span>}
+          </button>
           {messages.length > 0 && (
             <button onClick={() => setMessages([])} className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1 rounded hover:bg-slate-100 transition-colors">
               clear
@@ -804,8 +807,8 @@ function EmptyState({ mode, hasProject, projectName, onConnect, onSend }: {
           Ready with <span className="font-medium text-slate-700">{projectName}</span>
         </p>
       ) : (
-        <button onClick={onConnect} className="text-xs text-slate-400 hover:text-slate-600 underline mb-1 transition-colors">
-          Connect a project for deeper analysis →
+        <button onClick={onConnect} className={`text-xs px-3 py-1.5 rounded-full border font-medium mb-2 transition-colors ${mode.bgColor} ${mode.borderColor} ${mode.color} hover:opacity-85`}>
+          + connect project
         </button>
       )}
       <p className="text-slate-400 text-sm mb-5 max-w-xs">{mode.description}</p>
