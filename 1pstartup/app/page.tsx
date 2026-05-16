@@ -8,6 +8,7 @@ import type { ProjectSource, ProjectContext } from "@/lib/project/types";
 import ProjectConnector from "./components/ProjectConnector";
 
 const STORAGE_KEY = "1pstartup_project_source";
+const SESSION_CONTEXTS_KEY = "1pstartup_project_contexts";
 const PINS_KEY = "1pstartup_pins";
 
 const STARTER_PROMPTS: Record<Mode, { project: string[]; generic: string[] }> = {
@@ -77,6 +78,29 @@ function getStarterPrompts(mode: Mode, hasProject: boolean): string[] {
   return hasProject ? STARTER_PROMPTS[mode].project : STARTER_PROMPTS[mode].generic;
 }
 
+function sanitizeProjectSource(source: ProjectSource): ProjectSource {
+  if (source.type === "github") {
+    const { token: _token, ...safeSource } = source;
+    return safeSource;
+  }
+  return source;
+}
+
+function getProjectCacheKey(source: ProjectSource): string {
+  const safeSource = sanitizeProjectSource(source);
+  return JSON.stringify(safeSource);
+}
+
+function sanitizeProjectContext(ctx: ProjectContext): ProjectContext {
+  return { ...ctx, source: sanitizeProjectSource(ctx.source) };
+}
+
+function sanitizeProjectContexts(contexts: Partial<Record<Mode, ProjectContext>>) {
+  return Object.fromEntries(
+    Object.entries(contexts).map(([mode, ctx]) => [mode, ctx ? sanitizeProjectContext(ctx) : ctx])
+  ) as Partial<Record<Mode, ProjectContext>>;
+}
+
 // Auto-briefing messages (mirrors lib/prompts.ts BRIEFING_PROMPTS — client-safe copy)
 const BRIEFING_PROMPTS: Record<Mode, string> = {
   founder: "You just loaded my project. Give me a founder brief: the company-level bet, why it might matter now, and the 2 biggest focus or market risks.",
@@ -141,7 +165,7 @@ export default function Home() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        const source = JSON.parse(saved) as ProjectSource;
+        const source = sanitizeProjectSource(JSON.parse(saved) as ProjectSource);
         loadProject(source, "founder");
       }
     } catch { /* ignore */ }
@@ -167,12 +191,12 @@ export default function Home() {
   // Auto-brief when a new mode context loads
   useEffect(() => {
     const ctx = projectContexts[mode];
-    if (ctx && !briefedModesRef.current.has(mode) && messages.length === 0) {
+    if (ctx && messages.length === 0 && !streaming) {
       briefedModesRef.current.add(mode);
       sendWithContext(BRIEFING_PROMPTS[mode], ctx);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectContexts, mode]);
+  }, [projectContexts, mode, messages.length, streaming]);
 
   // Auto-brief manual context as users move through roles without a project.
   useEffect(() => {
@@ -194,16 +218,43 @@ export default function Home() {
     setProjectLoading(true);
     setProjectError(null);
     try {
+      const safeSource = sanitizeProjectSource(source);
+      const cacheKey = getProjectCacheKey(safeSource);
+      const cached = sessionStorage.getItem(SESSION_CONTEXTS_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached) as {
+          cacheKey?: string;
+          source?: ProjectSource;
+          contexts?: Partial<Record<Mode, ProjectContext>>;
+        };
+        if (parsed.cacheKey === cacheKey && parsed.contexts?.[targetMode]) {
+          const cachedContexts = sanitizeProjectContexts(parsed.contexts);
+          setProjectContexts(cachedContexts);
+          setProjectSource(safeSource);
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(safeSource)); } catch { /* ignore */ }
+          return true;
+        }
+      }
+
       const res = await fetch("/api/project/load", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source, mode: targetMode }),
+        body: JSON.stringify({ source, mode: targetMode, allModes: true }),
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || "Failed to load project");
-      setProjectContexts((prev) => ({ ...prev, [targetMode]: data.projectContext }));
-      setProjectSource(source);
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(source)); } catch { /* ignore */ }
+      const nextContexts = sanitizeProjectContexts(data.projectContexts ?? { [targetMode]: data.projectContext });
+      const nextSource = sanitizeProjectSource(data.projectContext?.source ?? safeSource);
+      setProjectContexts(nextContexts);
+      setProjectSource(nextSource);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(nextSource)); } catch { /* ignore */ }
+      try {
+        sessionStorage.setItem(SESSION_CONTEXTS_KEY, JSON.stringify({
+          cacheKey: getProjectCacheKey(nextSource),
+          source: nextSource,
+          contexts: nextContexts,
+        }));
+      } catch { /* ignore */ }
       return true;
     } catch (err) {
       setProjectError(err instanceof Error ? err.message : "Unknown error");
@@ -211,6 +262,7 @@ export default function Home() {
       setProjectContexts({});
       briefedModesRef.current.clear();
       try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+      try { sessionStorage.removeItem(SESSION_CONTEXTS_KEY); } catch { /* ignore */ }
       return false;
     } finally {
       setProjectLoading(false);
@@ -237,6 +289,7 @@ export default function Home() {
     setProjectError(null);
     briefedModesRef.current.clear();
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+    try { sessionStorage.removeItem(SESSION_CONTEXTS_KEY); } catch { /* ignore */ }
   }
 
   async function handleProjectLoad(source: ProjectSource) {

@@ -86,6 +86,13 @@ async function fetchFileContent(
   token?: string
 ): Promise<string | null> {
   try {
+    if (!token) {
+      const rawPath = filePath.split("/").map(encodeURIComponent).join("/");
+      const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(branch)}/${rawPath}`;
+      const raw = await fetch(rawUrl);
+      if (raw.ok) return await raw.text();
+    }
+
     const res = await fetch(
       `${GITHUB_API}/repos/${owner}/${repo}/contents/${filePath}?ref=${encodeURIComponent(branch)}`,
       { headers: makeHeaders(token) }
@@ -213,4 +220,92 @@ export async function loadGitHubProject(
   const files = selectFilesWithinBudget(candidates, tokenBudget, manifest.perFileTokenLimit);
 
   return { files, directoryTree, resolvedBranch };
+}
+
+export async function loadGitHubProjectForModes(
+  owner: string,
+  repo: string,
+  branch: string,
+  modes: Mode[],
+  token?: string,
+  repoPath?: string
+): Promise<Record<Mode, { files: ProjectFile[]; directoryTree: string; resolvedBranch: string }>> {
+  const rootPath = normalizeRepoPath(repoPath);
+  const resolvedBranch = branch || await getDefaultBranch(owner, repo, token);
+  const fullTree = await getRepoTree(owner, repo, resolvedBranch, token);
+  const tree = rootPath
+    ? fullTree
+        .filter((e) => e.path === rootPath || e.path.startsWith(`${rootPath}/`))
+        .map((e) => ({ ...e, path: e.path.slice(rootPath.length).replace(/^\//, "") }))
+        .filter((e) => e.path.length > 0)
+    : fullTree;
+
+  if (rootPath && tree.length === 0) {
+    throw new Error(`Path "${rootPath}" was not found in ${owner}/${repo} on branch "${resolvedBranch}".`);
+  }
+
+  const dirs = new Set<string>();
+  tree.forEach((e) => {
+    const parts = e.path.split("/");
+    if (parts.length > 1) dirs.add(parts[0]);
+  });
+  const rootLabel = rootPath ? `${repo}/${rootPath}` : repo;
+  const directoryTree = `${rootLabel}/\n${[...dirs].slice(0, 30).map((d) => `├── ${d}/`).join("\n")}\n${tree.filter((e) => !e.path.includes("/")).slice(0, 20).map((e) => `├── ${e.path}`).join("\n")}`;
+
+  const scoredByMode = new Map<Mode, Array<{ path: string; priority: number; size: number }>>();
+  const pathsToFetch = new Set<string>();
+
+  for (const mode of modes) {
+    const manifest = ROLE_FILE_MANIFESTS[mode];
+    const scored: Array<{ path: string; priority: number; size: number }> = [];
+
+    for (const entry of tree) {
+      if (isBinaryPath(entry.path)) continue;
+      if (shouldExclude(entry.path, manifest.excludePatterns)) continue;
+      if ((entry.size ?? 0) > 400_000) continue;
+
+      const priorityIdx = manifest.priorityFiles.findIndex(
+        (pf) => entry.path === pf || entry.path.toLowerCase() === pf.toLowerCase() || entry.path.endsWith(`/${pf}`)
+      );
+      const patternMatch = manifest.patterns.some((p) => matchesGlob(entry.path, p));
+
+      if (priorityIdx === -1 && !patternMatch) continue;
+
+      const priority = priorityIdx >= 0 ? 1000 - priorityIdx : 10;
+      scored.push({ path: entry.path, priority, size: entry.size ?? 0 });
+    }
+
+    scored.sort((a, b) => b.priority - a.priority);
+    const topScored = scored.slice(0, 60);
+    scoredByMode.set(mode, topScored);
+    topScored.forEach((f) => pathsToFetch.add(f.path));
+  }
+
+  const fetchTasks = [...pathsToFetch].map((filePath) => async () => {
+    const fetchPath = rootPath ? `${rootPath}/${filePath}` : filePath;
+    const content = await fetchFileContent(owner, repo, fetchPath, resolvedBranch, token);
+    return { path: filePath, content };
+  });
+
+  const fetched = await fetchInBatches(fetchTasks, 5);
+  const contentByPath = new Map(
+    fetched
+      .filter((f): f is { path: string; content: string } => !!f.content?.trim())
+      .map((f) => [f.path, f.content])
+  );
+
+  return modes.reduce((acc, mode) => {
+    const manifest = ROLE_FILE_MANIFESTS[mode];
+    const tokenBudget = ROLE_TOKEN_BUDGETS[mode];
+    const candidates = (scoredByMode.get(mode) ?? [])
+      .map((f) => ({ path: f.path, content: contentByPath.get(f.path), priority: f.priority }))
+      .filter((f): f is { path: string; content: string; priority: number } => !!f.content?.trim());
+
+    acc[mode] = {
+      files: selectFilesWithinBudget(candidates, tokenBudget, manifest.perFileTokenLimit),
+      directoryTree,
+      resolvedBranch,
+    };
+    return acc;
+  }, {} as Record<Mode, { files: ProjectFile[]; directoryTree: string; resolvedBranch: string }>);
 }

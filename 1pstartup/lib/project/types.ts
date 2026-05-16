@@ -48,5 +48,6 @@ export interface RoleFileManifest {
 export interface ProjectLoadResult {
   success: boolean;
   projectContext?: ProjectContext;
+  projectContexts?: Partial<Record<Mode, ProjectContext>>;
   error?: string;
 }
