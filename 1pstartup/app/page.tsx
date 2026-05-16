@@ -10,6 +10,8 @@ import ProjectConnector from "./components/ProjectConnector";
 const STORAGE_KEY = "1pstartup_project_source";
 const SESSION_CONTEXTS_KEY = "1pstartup_project_contexts";
 const PINS_KEY = "1pstartup_pins";
+const CHAT_TIMEOUT_MS = 60_000;
+const AUTO_BRIEF_DELAY_MS = 350;
 
 const STARTER_PROMPTS: Record<Mode, { project: string[]; generic: string[] }> = {
   founder: {
@@ -136,6 +138,8 @@ export default function Home() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const requestIdRef = useRef(0);
+  const streamingRef = useRef(false);
   const briefedModesRef = useRef(new Set<Mode>());
   const manualBriefedModesRef = useRef(new Set<Mode>());
   const justConnectedRef = useRef(false);
@@ -147,6 +151,7 @@ export default function Home() {
 
   // Elapsed timer while streaming
   useEffect(() => {
+    streamingRef.current = streaming;
     if (!streaming) { setElapsed(0); return; }
     const t = setInterval(() => setElapsed((e) => e + 1), 1000);
     return () => clearInterval(t);
@@ -191,9 +196,14 @@ export default function Home() {
   // Auto-brief when a new mode context loads
   useEffect(() => {
     const ctx = projectContexts[mode];
-    if (ctx && messages.length === 0 && !streaming) {
-      briefedModesRef.current.add(mode);
-      sendWithContext(BRIEFING_PROMPTS[mode], ctx);
+    if (ctx && messages.length === 0 && !streaming && !briefedModesRef.current.has(mode)) {
+      const timeout = window.setTimeout(() => {
+        if (!streamingRef.current && !briefedModesRef.current.has(mode)) {
+          briefedModesRef.current.add(mode);
+          sendWithContext(BRIEFING_PROMPTS[mode], ctx);
+        }
+      }, AUTO_BRIEF_DELAY_MS);
+      return () => window.clearTimeout(timeout);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectContexts, mode, messages.length, streaming]);
@@ -206,13 +216,19 @@ export default function Home() {
       context &&
       !projectContexts[mode] &&
       !manualBriefedModesRef.current.has(mode) &&
-      messages.length === 0
+      messages.length === 0 &&
+      !streaming
     ) {
-      manualBriefedModesRef.current.add(mode);
-      sendWithContext(BRIEFING_PROMPTS[mode], undefined, context);
+      const timeout = window.setTimeout(() => {
+        if (!streamingRef.current && !manualBriefedModesRef.current.has(mode)) {
+          manualBriefedModesRef.current.add(mode);
+          sendWithContext(BRIEFING_PROMPTS[mode], undefined, context);
+        }
+      }, AUTO_BRIEF_DELAY_MS);
+      return () => window.clearTimeout(timeout);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [manualContextActive, projectContexts, mode, messages.length]);
+  }, [manualContextActive, projectContexts, mode, messages.length, streaming]);
 
   const loadProject = useCallback(async (source: ProjectSource, targetMode: Mode) => {
     setProjectLoading(true);
@@ -270,7 +286,9 @@ export default function Home() {
   }, []);
 
   function abortStream() {
+    requestIdRef.current += 1;
     if (abortRef.current) { abortRef.current.abort(); abortRef.current = null; }
+    streamingRef.current = false;
     setStreaming(false);
   }
 
@@ -303,7 +321,7 @@ export default function Home() {
     const context = manualContext.trim();
     setShowModal(false);
     setManualContextActive(!!context);
-    if (!context || streaming) return;
+    if (!context || streamingRef.current) return;
     manualBriefedModesRef.current.clear();
     manualBriefedModesRef.current.add(mode);
     sendWithContext(BRIEFING_PROMPTS[mode], projectContext ?? undefined, context);
@@ -311,15 +329,23 @@ export default function Home() {
 
   // Core send — accepts optional context override (used by auto-brief)
   async function sendWithContext(text: string, ctxOverride?: ProjectContext, manualContextOverride?: string) {
-    if (!text.trim() || streaming) return;
+    if (!text.trim() || streamingRef.current) return;
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setInput("");
     const newMessages: Message[] = [...messages, { role: "user", content: text }];
     setMessages(newMessages);
+    streamingRef.current = true;
     setStreaming(true);
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     const controller = new AbortController();
     abortRef.current = controller;
+    let timedOut = false;
+    const timeoutId = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, CHAT_TIMEOUT_MS);
 
     const effectiveCtx = ctxOverride ?? projectContext;
     const effectiveManualContext = (manualContextOverride ?? (manualContextActive ? manualContext : "")).trim();
@@ -361,6 +387,7 @@ export default function Home() {
             if (parsed.error) throw new Error(parsed.error);
             if (parsed.text) {
               setMessages((prev) => {
+                if (requestIdRef.current !== requestId) return prev;
                 const last = prev[prev.length - 1];
                 if (!last || last.role !== "assistant") {
                   return [...prev, { role: "assistant", content: parsed.text }];
@@ -374,8 +401,11 @@ export default function Home() {
         }
       }
     } catch (err) {
-      if ((err as Error).name === "AbortError") return;
-      const msg = err instanceof Error ? err.message : "Something went wrong";
+      if ((err as Error).name === "AbortError" && !timedOut) return;
+      if (requestIdRef.current !== requestId) return;
+      const msg = timedOut
+        ? "The model took too long to respond, likely due to provider rate limiting or overload. Please try again in a moment."
+        : err instanceof Error ? err.message : "Something went wrong";
       setMessages((prev) => {
         const last = prev[prev.length - 1];
         const errMsg = { role: "assistant" as const, content: `**Error:** ${msg}` };
@@ -383,9 +413,13 @@ export default function Home() {
         return [...prev.slice(0, -1), errMsg];
       });
     } finally {
-      setStreaming(false);
-      abortRef.current = null;
-      inputRef.current?.focus();
+      window.clearTimeout(timeoutId);
+      if (requestIdRef.current === requestId) {
+        streamingRef.current = false;
+        setStreaming(false);
+        abortRef.current = null;
+        inputRef.current?.focus();
+      }
     }
   }
 
@@ -396,10 +430,11 @@ export default function Home() {
   // Ask all roles in parallel (non-streaming, shows results together)
   async function askAllRoles() {
     const text = input.trim();
-    if (!text || streaming) return;
+    if (!text || streamingRef.current) return;
     setInput("");
     const newMessages: Message[] = [...messages, { role: "user", content: text }];
     setMessages([...newMessages, { role: "assistant", content: "" }]);
+    streamingRef.current = true;
     setStreaming(true);
 
     try {
@@ -438,6 +473,7 @@ export default function Home() {
         { role: "assistant", content: `**Error:** ${msg}` },
       ]);
     } finally {
+      streamingRef.current = false;
       setStreaming(false);
       inputRef.current?.focus();
     }
@@ -749,7 +785,7 @@ function EmptyState({ mode, hasProject, projectName, onConnect, onSend }: {
       <p className="text-slate-400 text-xs font-medium mb-1 uppercase tracking-wide">{mode.tagline}</p>
       {hasProject ? (
         <p className="text-slate-500 text-sm mb-1">
-          Analyzing <span className="font-medium text-slate-700">{projectName}</span>
+          Ready with <span className="font-medium text-slate-700">{projectName}</span>
         </p>
       ) : (
         <button onClick={onConnect} className="text-xs text-slate-400 hover:text-slate-600 underline mb-1 transition-colors">

@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const client = new Anthropic();
+const CHAT_STREAM_TIMEOUT_MS = 55_000;
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -145,6 +146,19 @@ export async function POST(req: Request) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      let closed = false;
+      const closeWithError = (message: string) => {
+        if (closed) return;
+        closed = true;
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: message })}\n\n`));
+        controller.close();
+      };
+      const timeoutId = setTimeout(() => {
+        const msg = "The model provider did not return a response in time. This is usually temporary rate limiting or overload. Please try again in a moment.";
+        console.error("[chat] stream timeout:", msg);
+        closeWithError(msg);
+      }, CHAT_STREAM_TIMEOUT_MS);
+
       try {
         let sentText = false;
         for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -163,11 +177,16 @@ export async function POST(req: Request) {
                 event.delta.type === "text_delta"
               ) {
                 sentText = true;
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`));
+                if (!closed) {
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`));
+                }
               }
             }
-            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-            controller.close();
+            if (!closed) {
+              closed = true;
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+              controller.close();
+            }
             console.log("[chat] stream complete");
             return;
           } catch (err) {
@@ -181,8 +200,9 @@ export async function POST(req: Request) {
       } catch (err) {
         const msg = normalizeChatError(err);
         console.error("[chat] stream error:", msg);
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: msg })}\n\n`));
-        controller.close();
+        closeWithError(msg);
+      } finally {
+        clearTimeout(timeoutId);
       }
     },
   });
