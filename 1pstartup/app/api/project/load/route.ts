@@ -19,6 +19,14 @@ function normalizeGitHubSource(source: Extract<ProjectSource, { type: "github" }
   };
 }
 
+function sanitizeProjectSource(source: ProjectSource): ProjectSource {
+  if (source.type === "github") {
+    const { token: _token, ...safeSource } = source;
+    return safeSource;
+  }
+  return source;
+}
+
 export async function POST(req: Request): Promise<Response> {
   try {
     const { source, mode, allModes } = (await req.json()) as { source: ProjectSource; mode: Mode; allModes?: boolean };
@@ -61,10 +69,11 @@ export async function POST(req: Request): Promise<Response> {
         for (const targetMode of modesToLoad) {
           const result = results[targetMode];
           const modeSource = { ...githubSource, branch: result.resolvedBranch };
+          const safeModeSource = sanitizeProjectSource(modeSource);
           const projectName = githubSource.path ? `${githubSource.repo}/${githubSource.path}` : githubSource.repo;
-          const summary = assembleProjectContext(result.files, result.directoryTree, modeSource, targetMode, projectName);
+          const summary = assembleProjectContext(result.files, result.directoryTree, safeModeSource, targetMode, projectName);
           projectContexts[targetMode] = {
-            source: modeSource,
+            source: safeModeSource,
             projectName,
             loadedAt: Date.now(),
             mode: targetMode,
@@ -107,14 +116,15 @@ export async function POST(req: Request): Promise<Response> {
       projectName = githubSource.path ? `${githubSource.repo}/${githubSource.path}` : githubSource.repo;
       // Update branch with resolved value
       githubSource.branch = result.resolvedBranch;
-      Object.assign(source, githubSource);
+      Object.assign(source, sanitizeProjectSource(githubSource));
     }
 
-    const summary = assembleProjectContext(files, directoryTree, source, mode, projectName);
+    const safeSource = sanitizeProjectSource(source);
+    const summary = assembleProjectContext(files, directoryTree, safeSource, mode, projectName);
     const totalTokenEstimate = estimateTokens(summary);
 
     const projectContext = {
-      source,
+      source: safeSource,
       projectName,
       loadedAt: Date.now(),
       mode,
