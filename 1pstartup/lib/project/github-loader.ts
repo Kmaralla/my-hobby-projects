@@ -41,7 +41,7 @@ async function getDefaultBranch(owner: string, repo: string, token?: string): Pr
       throw new Error("Invalid GitHub token. Generate one at github.com/settings/tokens with repo scope.");
     }
     if (res.status === 403) {
-      throw new Error("GitHub API rate limit reached or token lacks permissions. Add or refresh your token.");
+      throw new Error("GitHub API rate limit reached. Please try again later, or add a GitHub token to raise the rate limit.");
     }
     const err = await res.json().catch(() => ({}));
     throw new Error((err as { message?: string }).message || `GitHub API error: ${res.status}`);
@@ -70,7 +70,7 @@ async function getRepoTree(owner: string, repo: string, branch: string, token?: 
       throw new Error("Invalid GitHub token. Generate one at github.com/settings/tokens with repo scope.");
     }
     if (res.status === 403) {
-      throw new Error("GitHub API rate limit reached or token lacks permissions. Add or refresh your token.");
+      throw new Error("GitHub API rate limit reached. Please try again later, or add a GitHub token to raise the rate limit.");
     }
     throw new Error(`Failed to fetch repo tree from GitHub: ${res.status}`);
   }

@@ -91,6 +91,7 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [manualContext, setManualContext] = useState("");
+  const [manualContextActive, setManualContextActive] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [deep, setDeep] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -112,6 +113,7 @@ export default function Home() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const briefedModesRef = useRef(new Set<Mode>());
+  const manualBriefedModesRef = useRef(new Set<Mode>());
   const justConnectedRef = useRef(false);
 
   // Scroll to bottom on new messages
@@ -172,6 +174,22 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectContexts, mode]);
 
+  // Auto-brief manual context as users move through roles without a project.
+  useEffect(() => {
+    const context = manualContext.trim();
+    if (
+      manualContextActive &&
+      context &&
+      !projectContexts[mode] &&
+      !manualBriefedModesRef.current.has(mode) &&
+      messages.length === 0
+    ) {
+      manualBriefedModesRef.current.add(mode);
+      sendWithContext(BRIEFING_PROMPTS[mode], undefined, context);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manualContextActive, projectContexts, mode, messages.length]);
+
   const loadProject = useCallback(async (source: ProjectSource, targetMode: Mode) => {
     setProjectLoading(true);
     setProjectError(null);
@@ -228,8 +246,18 @@ export default function Home() {
     if (ok) setShowModal(false);
   }
 
+  function handleManualContextDone() {
+    const context = manualContext.trim();
+    setShowModal(false);
+    setManualContextActive(!!context);
+    if (!context || streaming) return;
+    manualBriefedModesRef.current.clear();
+    manualBriefedModesRef.current.add(mode);
+    sendWithContext(BRIEFING_PROMPTS[mode], projectContext ?? undefined, context);
+  }
+
   // Core send — accepts optional context override (used by auto-brief)
-  async function sendWithContext(text: string, ctxOverride?: ProjectContext) {
+  async function sendWithContext(text: string, ctxOverride?: ProjectContext, manualContextOverride?: string) {
     if (!text.trim() || streaming) return;
     setInput("");
     const newMessages: Message[] = [...messages, { role: "user", content: text }];
@@ -241,6 +269,7 @@ export default function Home() {
     abortRef.current = controller;
 
     const effectiveCtx = ctxOverride ?? projectContext;
+    const effectiveManualContext = (manualContextOverride ?? (manualContextActive ? manualContext : "")).trim();
 
     try {
       const res = await fetch("/api/chat", {
@@ -250,7 +279,7 @@ export default function Home() {
         body: JSON.stringify({
           mode,
           messages: newMessages,
-          context: manualContext || undefined,
+          context: effectiveManualContext || undefined,
           projectContext: effectiveCtx?.summary || undefined,
           deep,
           stream: true,
@@ -330,7 +359,7 @@ export default function Home() {
             body: JSON.stringify({
               mode: m.id,
               messages: newMessages,
-              context: manualContext || undefined,
+              context: manualContextActive ? manualContext.trim() || undefined : undefined,
               projectContext: ctx?.summary,
               deep: false,
               stream: false,
@@ -453,7 +482,7 @@ export default function Home() {
           <button
             onClick={() => { setShowModal(true); setModalTab("manual"); }}
             className={`text-xs px-2 py-1 rounded border transition-colors ${
-              manualContext ? "border-slate-400 text-slate-700 bg-slate-100" : "border-slate-200 text-slate-400 hover:text-slate-600"
+              manualContextActive ? "border-slate-400 text-slate-700 bg-slate-100" : "border-slate-200 text-slate-400 hover:text-slate-600"
             }`}
             title="Manual context"
           >✏️</button>
@@ -627,15 +656,18 @@ export default function Home() {
                 <ProjectConnector mode={mode} onLoad={handleProjectLoad} loading={projectLoading} error={projectError} />
               ) : (
                 <div className="space-y-2">
-                  <p className="text-xs text-slate-500">Context included in every message for this session.</p>
+                  <p className="text-xs text-slate-500">Click Done to brief the current role. Context stays included in every message for this session.</p>
                   <textarea
                     value={manualContext}
-                    onChange={(e) => setManualContext(e.target.value)}
+                    onChange={(e) => {
+                      setManualContext(e.target.value);
+                      setManualContextActive(false);
+                    }}
                     placeholder="Paste a PR description, feature spec, or any context…"
                     rows={5}
                     className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-slate-300 text-slate-700 placeholder:text-slate-400"
                   />
-                  <button onClick={() => setShowModal(false)} className="w-full py-2 text-sm font-medium bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors">
+                  <button onClick={handleManualContextDone} className="w-full py-2 text-sm font-medium bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors">
                     Done
                   </button>
                 </div>

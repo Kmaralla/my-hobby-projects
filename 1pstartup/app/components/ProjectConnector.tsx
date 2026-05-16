@@ -15,7 +15,7 @@ interface Props {
 const IS_DEPLOYED = process.env.NEXT_PUBLIC_VERCEL_ENV !== undefined;
 
 function looksLikeAuthError(error: string | null): boolean {
-  return !!error && /private|token|permission|unauthorized|forbidden|401|403/i.test(error);
+  return !!error && !/rate limit/i.test(error) && /private|token|permission|unauthorized|forbidden|401|403/i.test(error);
 }
 
 export default function ProjectConnector({ mode, onLoad, loading, error }: Props) {
@@ -101,7 +101,7 @@ export default function ProjectConnector({ mode, onLoad, loading, error }: Props
             }`}>
               {looksLikeAuthError(error)
                 ? "⚠️ GitHub access issue. A token may be required."
-                : "GitHub token (required for private repos)"}
+                : "GitHub token (private repos or higher rate limits)"}
             </label>
             <div className="flex items-center gap-2">
               <input
