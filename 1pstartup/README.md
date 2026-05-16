@@ -140,15 +140,9 @@ npm run start    # start the production build
 npm run smoke    # local smoke test for project loading + streaming chat
 ```
 
-The smoke test starts the app on a temporary local port, loads:
+The smoke test starts the app on a temporary local port, loads the current local project, and calls the streaming chat endpoint with `ONEPSTARTUP_MOCK_CHAT=1`, so it does not require a real Anthropic API call.
 
-```text
-https://github.com/Kmaralla/my-hobby-projects/tree/main/1pstartup
-```
-
-Then it calls the streaming chat endpoint with `ONEPSTARTUP_MOCK_CHAT=1`, so it does not require a real Anthropic API call.
-
-To smoke-test another public repo or folder:
+To smoke-test a public GitHub repo or folder:
 
 ```bash
 SMOKE_REPO_URL=https://github.com/owner/repo/tree/main/path npm run smoke

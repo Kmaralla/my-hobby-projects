@@ -343,9 +343,19 @@ export function getSystemPrompt(
   opts?: { brief?: boolean }
 ): string {
   let prompt = SKILL_PROMPTS[mode];
+  const manualContext = context?.trim();
 
-  if (context?.trim()) {
-    prompt = prompt.replace(/\$ARGUMENTS/g, context.trim());
+  if (manualContext) {
+    prompt += `
+
+---
+
+## Manual Context
+The user supplied the following session context. Treat it as the idea, PRD, feature brief, notes, or constraints for this conversation. Use it in every response unless the user explicitly changes direction.
+
+<manual_context>
+${manualContext}
+</manual_context>`;
   }
 
   prompt += `

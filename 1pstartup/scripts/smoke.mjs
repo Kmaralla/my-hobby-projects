@@ -2,7 +2,6 @@ import { spawn } from "node:child_process";
 import net from "node:net";
 
 const HOST = "127.0.0.1";
-const DEFAULT_REPO = "https://github.com/Kmaralla/my-hobby-projects/tree/main/1pstartup";
 
 function findOpenPort() {
   return new Promise((resolve, reject) => {
@@ -57,11 +56,14 @@ function parseGitHubUrl(input) {
 }
 
 async function loadProject(baseUrl, repoUrl) {
+  const source = repoUrl
+    ? parseGitHubUrl(repoUrl)
+    : { type: "local", path: process.cwd() };
   const res = await fetch(`${baseUrl}/api/project/load`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      source: parseGitHubUrl(repoUrl),
+      source,
       mode: "product",
     }),
   });
@@ -87,6 +89,7 @@ async function askStreamingChat(baseUrl, projectContext) {
           content: "Give me a one-line PM smoke test response.",
         },
       ],
+      context: "Manual context smoke test: this idea targets solo founders deciding what to build next.",
       projectContext: projectContext.summary,
       stream: true,
     }),
@@ -124,7 +127,7 @@ async function askStreamingChat(baseUrl, projectContext) {
 async function main() {
   const port = await findOpenPort();
   const baseUrl = `http://${HOST}:${port}`;
-  const repoUrl = process.env.SMOKE_REPO_URL || DEFAULT_REPO;
+  const repoUrl = process.env.SMOKE_REPO_URL;
 
   const child = spawn(
     "npm",
@@ -145,7 +148,7 @@ async function main() {
     const projectContext = await loadProject(baseUrl, repoUrl);
     const responseText = await askStreamingChat(baseUrl, projectContext);
 
-    if (!responseText.includes("smoke test passed")) {
+    if (!responseText.includes("smoke test passed") || !responseText.includes("with manual context")) {
       throw new Error(`Unexpected chat response: ${responseText}`);
     }
 

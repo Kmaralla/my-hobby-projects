@@ -330,6 +330,7 @@ export default function Home() {
             body: JSON.stringify({
               mode: m.id,
               messages: newMessages,
+              context: manualContext || undefined,
               projectContext: ctx?.summary,
               deep: false,
               stream: false,

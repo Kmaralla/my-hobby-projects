@@ -50,9 +50,10 @@ function isRetryableProviderError(err: unknown): boolean {
   return normalizeChatError(err).includes("temporarily overloaded");
 }
 
-function mockText(mode: Mode, projectContext?: string): string {
+function mockText(mode: Mode, projectContext?: string, context?: string): string {
   const projectLabel = projectContext ? "with project context" : "without project context";
-  return `**MOCK ${mode.toUpperCase()} RESPONSE** — smoke test passed ${projectLabel}.`;
+  const manualLabel = context ? "with manual context" : "without manual context";
+  return `**MOCK ${mode.toUpperCase()} RESPONSE** — smoke test passed ${projectLabel} and ${manualLabel}.`;
 }
 
 function streamText(text: string): Response {
@@ -95,7 +96,7 @@ export async function POST(req: Request) {
   console.log(`[chat] mode=${mode} deep=${deep} stream=${wantStream} msgs=${messages.length} hasProject=${!!projectContext}`);
 
   if (process.env.ONEPSTARTUP_MOCK_CHAT === "1") {
-    const text = mockText(mode, projectContext);
+    const text = mockText(mode, projectContext, context);
     return wantStream ? streamText(text) : Response.json({ text });
   }
 
