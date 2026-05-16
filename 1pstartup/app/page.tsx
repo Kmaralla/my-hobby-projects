@@ -143,6 +143,7 @@ export default function Home() {
   const briefedModesRef = useRef(new Set<Mode>());
   const manualBriefedModesRef = useRef(new Set<Mode>());
   const justConnectedRef = useRef(false);
+  const pendingAutoBriefModeRef = useRef<Mode | null>(null);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -193,12 +194,23 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-brief when a new mode context loads
+  // Auto-brief only the role that was explicitly loaded.
   useEffect(() => {
     const ctx = projectContexts[mode];
-    if (ctx && messages.length === 0 && !streaming && !briefedModesRef.current.has(mode)) {
+    if (
+      ctx &&
+      pendingAutoBriefModeRef.current === mode &&
+      messages.length === 0 &&
+      !streaming &&
+      !briefedModesRef.current.has(mode)
+    ) {
       const timeout = window.setTimeout(() => {
-        if (!streamingRef.current && !briefedModesRef.current.has(mode)) {
+        if (
+          pendingAutoBriefModeRef.current === mode &&
+          !streamingRef.current &&
+          !briefedModesRef.current.has(mode)
+        ) {
+          pendingAutoBriefModeRef.current = null;
           briefedModesRef.current.add(mode);
           sendWithContext(BRIEFING_PROMPTS[mode], ctx);
         }
@@ -294,6 +306,7 @@ export default function Home() {
 
   function switchMode(newMode: Mode) {
     abortStream();
+    pendingAutoBriefModeRef.current = null;
     setMode(newMode);
     setMessages([]);
     if (projectSource && !projectContexts[newMode]) {
@@ -306,6 +319,7 @@ export default function Home() {
     setProjectContexts({});
     setProjectError(null);
     briefedModesRef.current.clear();
+    pendingAutoBriefModeRef.current = null;
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     try { sessionStorage.removeItem(SESSION_CONTEXTS_KEY); } catch { /* ignore */ }
   }
@@ -313,7 +327,9 @@ export default function Home() {
   async function handleProjectLoad(source: ProjectSource) {
     justConnectedRef.current = true;
     briefedModesRef.current.clear(); // reset so new project gets a fresh brief
+    pendingAutoBriefModeRef.current = mode;
     const ok = await loadProject(source, mode);
+    if (!ok) pendingAutoBriefModeRef.current = null;
     if (ok) setShowModal(false);
   }
 
