@@ -13,6 +13,7 @@ export interface GitHubProjectSource {
   repo: string;
   branch: string;
   path?: string;
+  url?: string;
   token?: string;
 }
 

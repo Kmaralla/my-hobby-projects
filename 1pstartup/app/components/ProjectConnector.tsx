@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ProjectSource } from "@/lib/project/types";
+import { parseGitHubUrl } from "@/lib/project/github-url";
 import type { Mode } from "@/lib/types";
 
 interface Props {
@@ -13,25 +14,8 @@ interface Props {
 
 const IS_DEPLOYED = process.env.NEXT_PUBLIC_VERCEL_ENV !== undefined;
 
-function parseGitHubUrl(input: string): { owner: string; repo: string; branch: string; path?: string } | null {
-  const cleaned = input.trim()
-    .replace(/^https?:\/\/github\.com\//, "")
-    .replace(/^github\.com\//, "")
-    .replace(/\.git$/, "");
-  const parts = cleaned.split("/").filter(Boolean);
-  if (parts.length < 2) return null;
-
-  const [owner, repo, view, branch, ...pathParts] = parts;
-  if ((view === "tree" || view === "blob") && branch) {
-    return {
-      owner,
-      repo,
-      branch,
-      path: pathParts.length > 0 ? pathParts.join("/") : undefined,
-    };
-  }
-
-  return { owner, repo, branch: "" };
+function looksLikeAuthError(error: string | null): boolean {
+  return !!error && /private|token|permission|unauthorized|forbidden|401|403/i.test(error);
 }
 
 export default function ProjectConnector({ mode, onLoad, loading, error }: Props) {
@@ -55,6 +39,7 @@ export default function ProjectConnector({ mode, onLoad, loading, error }: Props
         repo: parsed.repo,
         branch: parsed.branch,
         path: parsed.path,
+        url: githubUrl.trim(),
         token: githubToken.trim() || undefined,
       });
     }
@@ -103,19 +88,19 @@ export default function ProjectConnector({ mode, onLoad, loading, error }: Props
             className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-300 text-slate-700 placeholder:text-slate-400 bg-white"
           />
 
-          {/* Token field — always visible, highlighted when error is about private repo */}
+          {/* Token field — always visible, highlighted only when the error looks auth-related */}
           <div className={`rounded-lg border p-3 space-y-1.5 ${
-            error?.includes("private") || error?.includes("token") || error?.includes("not found") || error?.includes("Not Found")
+            looksLikeAuthError(error)
               ? "border-amber-300 bg-amber-50"
               : "border-slate-200 bg-slate-50"
           }`}>
             <label className={`text-xs font-medium ${
-              error?.includes("private") || error?.includes("token") || error?.includes("not found") || error?.includes("Not Found")
+              looksLikeAuthError(error)
                 ? "text-amber-700"
                 : "text-slate-500"
             }`}>
-              {error?.includes("private") || error?.includes("not found") || error?.includes("Not Found")
-                ? "⚠️ Private repo? A GitHub token is required."
+              {looksLikeAuthError(error)
+                ? "⚠️ GitHub access issue. A token may be required."
                 : "GitHub token (required for private repos)"}
             </label>
             <div className="flex items-center gap-2">
@@ -145,7 +130,7 @@ export default function ProjectConnector({ mode, onLoad, loading, error }: Props
       )}
 
       {/* Error */}
-      {error && !error.includes("private") && !error.includes("token") && !error.includes("not found") && !error.includes("Not Found") && (
+      {error && (
         <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
       )}
 

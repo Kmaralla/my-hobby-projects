@@ -2,6 +2,7 @@ import type { Mode } from "@/lib/types";
 import type { ProjectFile } from "./types";
 import { ROLE_FILE_MANIFESTS, ROLE_TOKEN_BUDGETS, BINARY_EXTENSIONS } from "./manifests";
 import { selectFilesWithinBudget } from "./token-budget";
+import { parseGitHubUrl } from "./github-url";
 import path from "path";
 
 const GITHUB_API = "https://api.github.com";
@@ -16,14 +17,8 @@ function makeHeaders(token?: string): Record<string, string> {
 }
 
 export function parseGitHubInput(input: string): { owner: string; repo: string } | null {
-  const cleaned = input
-    .replace(/^https?:\/\/github\.com\//, "")
-    .replace(/^github\.com\//, "")
-    .replace(/\.git$/, "")
-    .trim();
-  const parts = cleaned.split("/").filter(Boolean);
-  if (parts.length < 2) return null;
-  return { owner: parts[0], repo: parts[1] };
+  const parsed = parseGitHubUrl(input);
+  return parsed ? { owner: parsed.owner, repo: parsed.repo } : null;
 }
 
 function normalizeRepoPath(repoPath?: string): string {
@@ -38,8 +33,8 @@ async function getDefaultBranch(owner: string, repo: string, token?: string): Pr
     if (res.status === 404) {
       throw new Error(
         token
-          ? `Repository "${owner}/${repo}" not found. Check the URL and that your token has access to this repo.`
-          : `Repository "${owner}/${repo}" not found. If it's a private repo, add a GitHub token above.`
+          ? `GitHub could not find "${owner}/${repo}". Check the repo URL and that your token has access.`
+          : `GitHub could not find "${owner}/${repo}". Check the repo URL. If the repo is private, add a GitHub token.`
       );
     }
     if (res.status === 401) {
@@ -64,10 +59,21 @@ interface TreeEntry {
 
 async function getRepoTree(owner: string, repo: string, branch: string, token?: string): Promise<TreeEntry[]> {
   const res = await fetch(
-    `${GITHUB_API}/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
+    `${GITHUB_API}/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
     { headers: makeHeaders(token) }
   );
-  if (!res.ok) throw new Error(`Failed to fetch repo tree: ${res.status}`);
+  if (!res.ok) {
+    if (res.status === 404) {
+      throw new Error(`Branch or ref "${branch}" was not found in ${owner}/${repo}. Check the GitHub URL branch and folder path.`);
+    }
+    if (res.status === 401) {
+      throw new Error("Invalid GitHub token. Generate one at github.com/settings/tokens with repo scope.");
+    }
+    if (res.status === 403) {
+      throw new Error("GitHub API rate limit reached or token lacks permissions. Add or refresh your token.");
+    }
+    throw new Error(`Failed to fetch repo tree from GitHub: ${res.status}`);
+  }
   const data = await res.json() as { tree: TreeEntry[]; truncated: boolean };
   return data.tree.filter((e) => e.type === "blob");
 }
@@ -81,7 +87,7 @@ async function fetchFileContent(
 ): Promise<string | null> {
   try {
     const res = await fetch(
-      `${GITHUB_API}/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`,
+      `${GITHUB_API}/repos/${owner}/${repo}/contents/${filePath}?ref=${encodeURIComponent(branch)}`,
       { headers: makeHeaders(token) }
     );
     if (!res.ok) return null;
