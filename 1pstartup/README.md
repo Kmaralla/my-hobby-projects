@@ -1,10 +1,10 @@
-# agentstack
+# 1pstartup
 
-agentstack gives a solo founder five AI specialists looking at the same project from different seats at the table: Founder, Product, Dev, QA Eng, and Sales.
+1pstartup gives a solo founder five AI specialists looking at the same project from different seats at the table: Founder, Product, Dev, QA Eng, and Sales.
 
 Connect a GitHub repo or local project, ask a question, and switch roles when you need a different kind of judgment.
 
-![agentstack Product mode screenshot](./public/agentstack-screenshot.png)
+![1pstartup Product mode screenshot](./public/1pstartup-screenshot.svg)
 
 ---
 
@@ -31,9 +31,9 @@ Connect a project, then ask questions like:
 
 ## Why Not Just Use Claude?
 
-Claude gives strong general answers. agentstack gives role-specific verdicts grounded in your actual project files.
+Claude gives strong general answers. 1pstartup gives role-specific verdicts grounded in your actual project files.
 
-| | Claude / ChatGPT | agentstack |
+| | Claude / ChatGPT | 1pstartup |
 |---|---|---|
 | Knows your codebase | Only what you paste | Loads relevant repo files |
 | Role-aware | Generic assistant | Founder / Product / Dev / QA / Sales |
@@ -66,10 +66,10 @@ Edit `.env.local`:
 
 ```bash
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
-AGENTSTACK_MOCK_CHAT=0
+ONEPSTARTUP_MOCK_CHAT=0
 ```
 
-`AGENTSTACK_MOCK_CHAT=0` means the app uses real Anthropic responses. Set it to `1` only when you want deterministic fake responses for smoke tests or CI without using an API key.
+`ONEPSTARTUP_MOCK_CHAT=0` means the app uses real Anthropic responses. Set it to `1` only when you want deterministic fake responses for smoke tests or CI without using an API key.
 
 Then start the app:
 
@@ -88,7 +88,7 @@ Do not commit `.env.local`. It is ignored by git. Keep real API keys only in loc
 | Variable | Required | Used by | Description |
 |---|---:|---|---|
 | `ANTHROPIC_API_KEY` | Yes, for real AI responses | Server | API key used by `@anthropic-ai/sdk`. Leave empty only when using mock chat for smoke tests. |
-| `AGENTSTACK_MOCK_CHAT` | No | Server / smoke test | `0` uses real Anthropic responses. `1` returns deterministic fake responses for smoke tests and CI. Default: `0`. |
+| `ONEPSTARTUP_MOCK_CHAT` | No | Server / smoke test | `0` uses real Anthropic responses. `1` returns deterministic fake responses for smoke tests and CI. Default: `0`. |
 | `NEXT_PUBLIC_VERCEL_ENV` | No | Client | Automatically set by Vercel. When present, the UI hides local-path loading because deployed apps cannot read your local filesystem. |
 
 No secrets are required in the repository. The committed [.env.example](./.env.example) contains placeholders only.
@@ -111,7 +111,7 @@ You can also load a specific folder:
 https://github.com/owner/repo/tree/main/path/to/folder
 ```
 
-agentstack resolves the branch and folder, loads only relevant files for the selected role, and keeps that project connected as you switch roles.
+1pstartup resolves the branch and folder, loads only relevant files for the selected role, and keeps that project connected as you switch roles.
 
 ### Private GitHub Repos
 
@@ -146,7 +146,7 @@ The smoke test starts the app on a temporary local port, loads:
 https://github.com/Kmaralla/my-hobby-projects/tree/main/1pstartup
 ```
 
-Then it calls the streaming chat endpoint with `AGENTSTACK_MOCK_CHAT=1`, so it does not require a real Anthropic API call.
+Then it calls the streaming chat endpoint with `ONEPSTARTUP_MOCK_CHAT=1`, so it does not require a real Anthropic API call.
 
 To smoke-test another public repo or folder:
 
@@ -164,7 +164,7 @@ SMOKE_REPO_URL=https://github.com/owner/repo/tree/main/path npm run smoke
 
 Optional:
 
-- Leave `AGENTSTACK_MOCK_CHAT` unset or set to `0` for production.
+- Leave `ONEPSTARTUP_MOCK_CHAT` unset or set to `0` for production.
 - Set it to `1` only for preview environments where you want deterministic mock responses.
 
 ---

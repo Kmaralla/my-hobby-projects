@@ -7,8 +7,8 @@ import { MODES, type Mode, type Message, type ModeConfig, type PinnedDecision } 
 import type { ProjectSource, ProjectContext } from "@/lib/project/types";
 import ProjectConnector from "./components/ProjectConnector";
 
-const STORAGE_KEY = "agentstack_project_source";
-const PINS_KEY = "agentstack_pins";
+const STORAGE_KEY = "1pstartup_project_source";
+const PINS_KEY = "1pstartup_pins";
 
 const STARTER_PROMPTS: Record<Mode, { project: string[]; generic: string[] }> = {
   founder: {
@@ -392,7 +392,7 @@ export default function Home() {
     <div className="h-full flex flex-col overflow-hidden">
       {/* Header */}
       <header className="bg-white border-b border-slate-200 px-4 py-2.5 flex items-center gap-2 shrink-0">
-        <span className="font-bold text-slate-900 tracking-tight">agentstack</span>
+        <span className="font-bold text-slate-900 tracking-tight">1pstartup</span>
         <span className="text-slate-300 text-sm">|</span>
 
         {/* Mode pills with keyboard hint */}

@@ -1,0 +1,53 @@
+<svg width="1280" height="615" viewBox="0 0 1280 615" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="615" fill="#f8fafc"/>
+  <rect width="1280" height="46" fill="#ffffff"/>
+  <line x1="0" y1="46" x2="1280" y2="46" stroke="#e2e8f0"/>
+
+  <text x="16" y="29" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="16" font-weight="700" fill="#0f172a">1pstartup</text>
+  <line x1="103" y1="15" x2="103" y2="32" stroke="#cbd5e1"/>
+
+  <g font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12" font-weight="600">
+    <rect x="118" y="11" width="88" height="24" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="130" y="27" fill="#94a3b8">🎯 Founder</text>
+
+    <rect x="211" y="11" width="93" height="24" rx="12" fill="#ecfeff" stroke="#67e8f9"/>
+    <text x="224" y="27" fill="#0e7490">🧭 Product 2</text>
+
+    <rect x="309" y="11" width="58" height="24" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="321" y="27" fill="#94a3b8">⚙️ Dev</text>
+
+    <rect x="372" y="11" width="77" height="24" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="384" y="27" fill="#94a3b8">🔬 QA Eng</text>
+
+    <rect x="454" y="11" width="71" height="24" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="466" y="27" fill="#94a3b8">📣 Sales</text>
+  </g>
+
+  <rect x="1102" y="11" width="123" height="24" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+  <text x="1115" y="27" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12" fill="#64748b">+ connect project</text>
+  <rect x="1235" y="11" width="29" height="24" rx="5" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="1244" y="27" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="12" fill="#94a3b8">✏️</text>
+
+  <g text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <text x="640" y="183" font-size="36">🧭</text>
+    <text x="640" y="224" font-size="18" font-weight="700" fill="#0e7490">Product Mode</text>
+    <text x="640" y="248" font-size="12" font-weight="700" letter-spacing="0.08em" fill="#94a3b8">PRD / PRIORITY / USER FLOW</text>
+    <text x="640" y="267" font-size="12" fill="#64748b" text-decoration="underline">Connect a project for deeper analysis →</text>
+    <text x="640" y="290" font-size="15" fill="#94a3b8">Who is the user, what is the job, and what should</text>
+    <text x="640" y="310" font-size="15" fill="#94a3b8">the next release include?</text>
+  </g>
+
+  <g font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" fill="#0e7490">
+    <rect x="448" y="335" width="384" height="54" rx="7" fill="#ecfeff" stroke="#67e8f9"/>
+    <text x="462" y="358">Help me define the PRD for an AI code review assistant: user,</text>
+    <text x="462" y="377">job-to-be-done, P0 requirements, and success metric.</text>
+
+    <rect x="448" y="395" width="384" height="54" rx="7" fill="#ecfeff" stroke="#67e8f9"/>
+    <text x="462" y="418">I have 5 feature ideas. Help me prioritize them into</text>
+    <text x="462" y="437">P0/P1/P2/Cut with rationale.</text>
+
+    <rect x="448" y="455" width="384" height="54" rx="7" fill="#ecfeff" stroke="#67e8f9"/>
+    <text x="462" y="478">Write user stories and acceptance criteria for connecting a</text>
+    <text x="462" y="497">GitHub repo and getting a product review.</text>
+  </g>
+</svg>

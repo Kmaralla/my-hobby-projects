@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "agentstack",
-  description: "Four role lenses for any project",
+  title: "1pstartup",
+  description: "Five role lenses for any project",
 };
 
 export default function RootLayout({

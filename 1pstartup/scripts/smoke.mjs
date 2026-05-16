@@ -131,7 +131,7 @@ async function main() {
     ["run", "dev", "--", "--hostname", HOST, "--port", String(port)],
     {
       cwd: process.cwd(),
-      env: { ...process.env, AGENTSTACK_MOCK_CHAT: "1" },
+      env: { ...process.env, ONEPSTARTUP_MOCK_CHAT: "1" },
       stdio: ["ignore", "pipe", "pipe"],
     }
   );

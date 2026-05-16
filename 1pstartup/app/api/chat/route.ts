@@ -94,7 +94,7 @@ export async function POST(req: Request) {
 
   console.log(`[chat] mode=${mode} deep=${deep} stream=${wantStream} msgs=${messages.length} hasProject=${!!projectContext}`);
 
-  if (process.env.AGENTSTACK_MOCK_CHAT === "1") {
+  if (process.env.ONEPSTARTUP_MOCK_CHAT === "1") {
     const text = mockText(mode, projectContext);
     return wantStream ? streamText(text) : Response.json({ text });
   }
